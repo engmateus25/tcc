@@ -2,7 +2,6 @@ from fastapi import APIRouter
 from app.services.agent_langchain import handle_analytics_question
 from app.schemas.dto import AgentRequest, AgentResponse
 
-
 router = APIRouter()
 
 @router.post("/agent", response_model=AgentResponse)
