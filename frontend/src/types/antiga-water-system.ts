@@ -8,7 +8,7 @@ export interface SensorData {
 
 export interface PumpState {
   isOn: boolean;
-  mode: "automático" | "manual mqtt" | "manual chave";
+  mode: "automático" | "remoto" | "físico";
   powerWatts: number;
 }
 

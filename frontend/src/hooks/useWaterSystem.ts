@@ -19,7 +19,7 @@ const initialState: State = {
   waterLevel: 42,
   isPumpOn: false,
   pumpMode: "automático",
-  lastSensor: { name: "Sensor Nível Alto", action: "subiu", time: "04:11:37" },
+  lastSensor: { name: "alto", action: "subiu", time: "04:11:37" },
   isConnected: { firebase: false, mqtt: false },
 };
 
