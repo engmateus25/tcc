@@ -20,10 +20,11 @@ node_modules/
 
 # testing
 /coverage
-.pyc*
-.cpython-312.pyc*
-*.cpython-312.pyc
-__pycache__/*
+
+# Cache do Python
+__pycache__/
+*.py[cod]
+*$py.class
 
 # production
 /dist
