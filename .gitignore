@@ -3,7 +3,8 @@
 # dependencies
 /node_modules
 node_modules/
-venv/
+.venv/
+.venv/*
 .env
 /.pnp
 .pnp.js
@@ -12,10 +13,17 @@ venv/
 /backend/.env
 /backend/tcc1-155fa-firebase-admin.json
 
+/firmware/TCC.ino/TCC_2_sensores/*
+/firmware/TCC.ino/TCC_2_sensores/
+
 /frontend/node_modules/
 
 # testing
 /coverage
+.pyc*
+.cpython-312.pyc*
+*.cpython-312.pyc
+__pycache__/*
 
 # production
 /dist
@@ -39,3 +47,4 @@ firebase-debug.log*
 # IA
 .codex
 RESPOSTA_1_CODEX.md
+credentials.json

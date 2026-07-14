@@ -6,7 +6,7 @@
 
 ```bash
 cd ~/Projetos/tcc/
-npm install motion lucide-react class-variance-authority clsx tailwind-merge @radix-ui/react-slot @radix-ui/react-dialog @radix-ui/react-alert-dialog tailwindcss@next @tailwindcss/vite@next
+npm install
 ```
 
 ### 2️⃣ Copiar Arquivos
