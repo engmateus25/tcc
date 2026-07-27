@@ -9,6 +9,7 @@ O sistema esta dividido em tres dominios principais:
 - `backend/`: API, agentes de IA, relatorios, alertas e integracao server-side com Firestore.
 - `frontend/`: aplicacao Ionic React para visualizacao, controle da bomba, historico e assistente IA.
 - `firmware/`: codigo do ESP32 responsavel por sensores, bomba, MQTT e envio de eventos ao Firestore.
+- `functions/`: rascunho server-side para futura Cloud Function acionada por eventos Firestore.
 
 Fluxo principal:
 
@@ -35,6 +36,8 @@ Backend -> Firebase Admin -> leitura de eventos, sessoes e alertas
 |   |   `-- tasks/
 |   |-- generated/
 |   `-- requirements.txt
+|-- functions/
+|   `-- src/
 |-- firmware/
 |   `-- TCC.ino/
 |       |-- TCC_Final/
@@ -211,7 +214,7 @@ Uso atual:
 - MQTT `bomba/controle`: comandos enviados pelo app.
 - MQTT `bomba/estado`: status lido pelo app quando publicado.
 
-Ha tambem codigo com formato de Cloud Function em `frontend/src/services/alerts.ts`. Pelo conteudo, ele representa uma funcao server-side para disparar o webhook `/alerts/sensor-event` quando um documento novo entra em `sensores`. Em uma reorganizacao futura, esse codigo deve sair do frontend e ir para uma pasta propria, por exemplo `functions/`.
+Ha tambem um rascunho server-side de Cloud Function em `functions/src/index.js` para disparar o webhook `/alerts/sensor-event` quando um documento novo entra em `sensores`. Essa pasta ainda nao esta pronta para deploy; a configuracao completa de Firebase Functions, secrets, autenticacao e idempotencia sera definida nas proximas atividades.
 
 ## Cuidados de seguranca
 
@@ -305,4 +308,4 @@ Para firmware, validar no Arduino IDE ou ambiente equivalente com placa ESP32 e 
 - O frontend ja escuta Firestore para ultimo evento de sensor.
 - O controle da bomba usa MQTT diretamente do frontend.
 - O backend le Firestore para relatorios, alertas e agente IA.
-- A Cloud Function de alertas esta representada dentro de `frontend/src/services/alerts.ts`, mas deveria viver em um modulo server-side separado no futuro.
+- A Cloud Function de alertas agora esta separada em `functions/src/index.js`, mas ainda precisa de configuracao Firebase, autenticacao, secrets e idempotencia antes de deploy.

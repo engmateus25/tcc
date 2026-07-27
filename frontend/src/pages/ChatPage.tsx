@@ -4,10 +4,7 @@ import { ArrowLeft, Send, Trash2, Bot, User } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
-import { 
-  type Role,
-  sendAgentQuestion,
-} from "../services/aiService";
+import { sendAgentQuestion } from "../services/aiService";
 import { motion, AnimatePresence } from "motion/react";
 
 interface Message {
@@ -31,8 +28,6 @@ export function ChatPage() {
   ]);
   const [inputValue, setInputValue] = useState("");
   const [isTyping, setIsTyping] = useState(false);
-  // sessionId não é mais usado pelo agente, mas se quiser pode remover completamente
-  const [sessionId, setSessionId] = useState<string | undefined>(undefined);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 

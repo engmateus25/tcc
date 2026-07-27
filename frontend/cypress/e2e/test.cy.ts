@@ -1,6 +1,7 @@
-describe('My First Test', () => {
-  it('Visits the app root url', () => {
+describe('AquaMonitor shell', () => {
+  it('loads the dashboard route', () => {
     cy.visit('/')
-    cy.contains('#container', 'Ready to create an app?')
+    cy.contains('AquaMonitor')
+    cy.contains('Nível do Reservatório')
   })
 })

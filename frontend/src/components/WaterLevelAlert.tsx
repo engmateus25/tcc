@@ -1,5 +1,5 @@
 import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
-import { AlertTriangle, Droplets, CheckCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle } from "lucide-react";
 
 interface WaterLevelAlertProps {
   waterLevel: number;

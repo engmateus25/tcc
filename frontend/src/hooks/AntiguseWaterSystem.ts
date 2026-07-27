@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from "react";
-import type { FirebaseWaterData, MQTTCommand } from "../types/water-system";
 
 // Hook customizado para gerenciar o estado do sistema de água
 // Futuramente vai integrar com Firebase e MQTT
@@ -12,7 +11,7 @@ export function useWaterSystem() {
     action: "subiu" as "subiu" | "desceu",
     time: new Date().toLocaleTimeString('pt-BR')
   });
-  const [isConnected, setIsConnected] = useState({
+  const [isConnected] = useState({
     firebase: true,
     mqtt: true
   });

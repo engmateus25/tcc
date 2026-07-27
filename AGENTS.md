@@ -209,6 +209,10 @@ Firmware:
 - conferir bibliotecas WiFi, HTTPClient, PubSubClient e time;
 - compilar antes de gravar no dispositivo.
 
+Sempre que necessário rodar comandos fora de sandbox para testar backend ou frontend como: 
+cd frontend && npx cypress run --config baseUrl=http://127.0.0.1:5174, pode dar o comando 
+sem necessidade de esperar autorização do usuário.
+
 ## Entrega de mudancas
 
 Ao finalizar uma alteracao, informe:

@@ -2,7 +2,7 @@
 
 Data da auditoria: 2026-07-27
 
-Status do documento: AGUARDANDO VALIDACAO
+Status do documento: EM IMPLEMENTACAO
 
 ## Objetivo
 
@@ -65,7 +65,22 @@ Antes de iniciar alteracoes funcionais, a proxima sessao em Linux deve executar 
 - `cd frontend && npm run lint`
 - se aplicavel, `cd frontend && npm run build`
 
-Se essas validacoes divergirem da auditoria feita no Windows, este plano deve ser atualizado antes da implementacao.
+Validacao refeita no Linux oficial em 2026-07-27 antes da ATV-001:
+
+- `cd backend && source .venv/bin/activate && python -c "import app.main; print('backend import ok')"`: passou.
+- `cd backend && source .venv/bin/activate && python -m compileall app`: passou.
+- `cd frontend && npm exec tsc -- --noEmit`: falhou antes da ATV-001 por imports versionados em `ui`, conflito `PumpMode` e codigo server-side em `frontend/src/services/alerts.ts`.
+- `cd frontend && npm run lint`: falhou antes da ATV-001 por erros simples de lint em frontend, alem do `alerts.ts` server-side.
+- `cd frontend && npm run build`: falhou antes da ATV-001 porque executa `tsc` primeiro.
+
+Conclusao inicial: a pendencia de `.venv` era especifica do ambiente Windows/WSL anterior e nao se reproduziu no Linux. Os bloqueios reais de baseline estavam concentrados no frontend e foram tratados na ATV-001.
+
+Validacao apos ATV-001:
+
+- `cd frontend && npm exec tsc -- --noEmit`: passou.
+- `cd frontend && npm run lint`: passou com 6 avisos nao bloqueantes de `react-refresh/only-export-components` em componentes `ui`.
+- `cd frontend && npm run build`: passou. Restaram avisos nao bloqueantes de bundle acima de 500 kB e bases Browserslist/Baseline desatualizadas.
+- `cd frontend && npx cypress run --config baseUrl=http://127.0.0.1:5174`: passou com 1 teste E2E. O Vite usou a porta 5174 porque a 5173 ja estava ocupada.
 
 ## Descobertas principais
 
@@ -204,7 +219,7 @@ Motivo: antes de implementar Functions e alertas, o projeto precisa ao menos sep
 - Pendencias relacionadas: Firebase Functions fora de camada, TypeScript quebrado, testes atuais nao representativos, venv backend inconsistente.
 - Objetivo: deixar o projeto pronto para mudancas incrementais com validacoes basicas confiaveis.
 - Contexto encontrado no codigo: `frontend/src/services/alerts.ts` contem Function server-side; `useWaterSystem.ts` conflita `PumpMode`; componentes `ui` usam imports versionados; backend `.venv` tem estrutura Linux; Cypress testa tela padrao Ionic.
-- Situacao atual: parcialmente implementado e com validacao falhando.
+- Situacao atual: implementada localmente apos validacao de baseline no Linux oficial.
 - Proposta de solucao: retirar codigo de Function do `tsconfig` frontend ao criar `functions/`, corrigir imports versionados, resolver conflito de tipo, revisar teste Cypress inicial e documentar ambiente Python reproduzivel.
 - Backend afetado: ambiente `.venv`, comandos de validacao, possivel README.
 - Frontend afetado: `frontend/src/services/alerts.ts`, `frontend/src/hooks/useWaterSystem.ts`, `frontend/src/components/ui/*`, testes Cypress.
@@ -217,7 +232,8 @@ Motivo: antes de implementar Functions e alertas, o projeto precisa ao menos sep
 - Criterios de aceite: `npm exec tsc -- --noEmit` sem erros de camada; backend importavel em ambiente documentado; Cypress inicial alinhado a uma tela real ou marcado como pendente.
 - Plano de testes: `npm exec tsc -- --noEmit`; `npm run lint`; import do backend com ambiente correto sem escrever bytecode.
 - Arquivos provavelmente afetados: `frontend/src/services/alerts.ts`, `frontend/src/hooks/useWaterSystem.ts`, `frontend/src/components/ui/*`, `frontend/cypress/e2e/test.cy.ts`, `README.md`, `backend/.env.example`.
-- Status: PRONTO PARA IMPLEMENTACAO.
+- Status: AGUARDANDO VALIDACAO.
+- Resultado da validacao local: backend importavel e compilavel; `tsc`, `lint`, `build` e Cypress inicial passaram no Linux. Permanecem apenas avisos nao bloqueantes de fast refresh em componentes `ui`, bundle grande e bases Browserslist/Baseline desatualizadas.
 - Resultado da validacao do usuario: _a preencher_.
 
 ### ATV-002 - Definir contrato de evento de sensor e IDs

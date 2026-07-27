@@ -5,7 +5,7 @@ import { useWaterSystem } from "../hooks/useWaterSystem";
 import { IonPage, IonHeader, IonContent, IonFooter } from "@ionic/react";
 
 
-export default function AppLayout({ children }: PropsWithChildren<{}>) {
+export default function AppLayout({ children }: PropsWithChildren) {
   const { isConnected } = useWaterSystem();
 
   return (

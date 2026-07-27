@@ -17,6 +17,7 @@ node_modules/
 /firmware/TCC.ino/TCC_2_sensores/
 
 /frontend/node_modules/
+/frontend/dist/
 
 # testing
 /coverage

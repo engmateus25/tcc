@@ -1,9 +1,34 @@
 import { 
   collection, query, getDocs, where, orderBy, 
-  limit, onSnapshot, Unsubscribe, Timestamp 
+  limit, onSnapshot, Unsubscribe, Timestamp,
+  type FirestoreError, type QueryConstraint,
 } from "firebase/firestore";
 import { db } from "./firestoreConfig";
 
+type FirestoreTimestampLike =
+  | Timestamp
+  | Date
+  | string
+  | { seconds: number }
+  | null
+  | undefined;
+
+type SensorDocumentData = {
+  sensor?: unknown;
+  estado?: unknown;
+  timestamp?: FirestoreTimestampLike;
+};
+
+export type SensorHistoryItem = {
+  id: string;
+  sensor: string;
+  estado: string;
+  timestamp: FirestoreTimestampLike | string;
+};
+
+function readString(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
 
 export const carregarUltimoEstado = async () => {
   try {
@@ -11,13 +36,13 @@ export const carregarUltimoEstado = async () => {
     const q = query(sensoresRef, orderBy("timestamp", "desc"));
     const querySnapshot = await getDocs(q);
 
-    const historico: any[] = [];
+    const historico: SensorHistoryItem[] = [];
     querySnapshot.forEach((doc) => {
-      const data = doc.data();
+      const data = doc.data() as SensorDocumentData;
       historico.push({
         id: doc.id,
-        sensor: data.sensor,
-        estado: data.estado,
+        sensor: readString(data.sensor),
+        estado: readString(data.estado),
         timestamp: data.timestamp
       });
     });
@@ -33,7 +58,7 @@ export const carregarUltimoEstado = async () => {
 export const buscarComFiltros = async (sensorFiltro: string, dataInicio: string, dataFim: string) => {
   try {
     const sensoresRef = collection(db, "sensores");
-    let filtros: any[] = [];
+    const filtros: QueryConstraint[] = [];
 
     if (dataInicio && dataFim) {
       const inicioDate = new Date(dataInicio + "T00:00:00");
@@ -56,14 +81,14 @@ export const buscarComFiltros = async (sensorFiltro: string, dataInicio: string,
 
     const querySnapshot = await getDocs(q);
 
-    const dados: any[] = [];
+    const dados: SensorHistoryItem[] = [];
     querySnapshot.forEach(doc => {
-      const data = doc.data();
+      const data = doc.data() as SensorDocumentData;
       dados.push({
         id: doc.id,
-        sensor: data.sensor,
-        estado: data.estado,
-        timestamp: new Date(data.timestamp.seconds * 1000).toLocaleString()
+        sensor: readString(data.sensor),
+        estado: readString(data.estado),
+        timestamp: normalizeTimestamp(data.timestamp).toLocaleString()
       });
     });
 
@@ -83,9 +108,12 @@ export type UltimoEvento = {
   timestamp: Date;
 };
 
-function normalizeTimestamp(ts: any): Date {
+function normalizeTimestamp(ts: FirestoreTimestampLike): Date {
+  if (ts instanceof Date) return ts;
   if (ts instanceof Timestamp) return ts.toDate();
-  if (typeof ts?.seconds === "number") return new Date(ts.seconds * 1000);
+  if (ts && typeof ts === "object" && "seconds" in ts && typeof ts.seconds === "number") {
+    return new Date(ts.seconds * 1000);
+  }
   if (typeof ts === "string") return new Date(ts);
   return new Date();
 }
@@ -96,7 +124,7 @@ function normalizeTimestamp(ts: any): Date {
  */
 export function listenUltimoEstado(
   onChange: (ev: UltimoEvento | null) => void,
-  onError?: (e: any) => void
+  onError?: (e: FirestoreError) => void
 ): Unsubscribe {
   const sensoresRef = collection(db, "sensores");
   const q = query(sensoresRef, orderBy("timestamp", "desc"), limit(1));
@@ -109,11 +137,11 @@ export function listenUltimoEstado(
         return;
       }
       const doc = snap.docs[0];
-      const data = doc.data() as any;
+      const data = doc.data() as SensorDocumentData;
       onChange({
         id: doc.id,
-        sensor: data.sensor,
-        estado: data.estado,
+        sensor: readString(data.sensor),
+        estado: readString(data.estado),
         timestamp: normalizeTimestamp(data.timestamp),
       });
     },

@@ -1,10 +1,8 @@
 // src/hooks/useWaterSystem.ts
 import { useEffect, useMemo, useState, useCallback } from "react";
-import type { LastSensor, PumpMode } from "../types/water-system"; // ajuste se seu arquivo tiver outro nome
+import type { LastSensor, PumpMode } from "../types/water-system";
 import client, { enviarComando } from "../services/mqttService";
 import { listenUltimoEstado, UltimoEvento } from "../services/firestoreService";
-
-type PumpMode = "automático" | "manual mqtt" | "manual chave";
 
 type State = {
   waterLevel: number;
@@ -13,6 +11,18 @@ type State = {
   lastSensor: LastSensor | null;
   isConnected: { firebase: boolean; mqtt: boolean };
 };
+
+function isLastSensorAction(value: string): value is LastSensor["action"] {
+  return value === "subiu" || value === "desceu";
+}
+
+function isPumpMode(value: unknown): value is PumpMode {
+  return (
+    value === "automático" ||
+    value === "manual mqtt" ||
+    value === "manual chave"
+  );
+}
 
 // Mock inicial (até chegar dados reais)
 const initialState: State = {
@@ -36,7 +46,7 @@ export function useWaterSystem() {
         }
         const ls: LastSensor = {
           name: ev.sensor,
-          action: ev.estado as any, // "subiu" | "desceu"
+          action: isLastSensorAction(ev.estado) ? ev.estado : "desceu",
           time: ev.timestamp.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
         };
         setState((s) => ({
@@ -54,7 +64,7 @@ export function useWaterSystem() {
   // ---- MQTT: usa SEU client e tópicos já existentes ----
   useEffect(() => {
     // se já estiver conectado (porque o serviço inicia na importação), marcamos true
-    if ((client as any).connected) {
+    if (client.connected) {
       setState((s) => ({ ...s, isConnected: { ...s.isConnected, mqtt: true } }));
     }
 
@@ -74,9 +84,9 @@ export function useWaterSystem() {
         let mode: PumpMode | null = null;
 
         if (text.startsWith("{")) {
-          const obj = JSON.parse(text);
+          const obj = JSON.parse(text) as { isOn?: unknown; mode?: unknown };
           if (typeof obj.isOn === "boolean") isOn = obj.isOn;
-          if (typeof obj.mode === "string") mode = obj.mode as PumpMode;
+          if (isPumpMode(obj.mode)) mode = obj.mode;
         } else {
           const lower = text.toLowerCase();
           if (lower.includes("ligad")) isOn = true;
