@@ -152,7 +152,7 @@ Processo:
 2. Criar ou revisar a spec.
 3. Dividir tarefas pequenas por dominio: backend, frontend, firmware e integracao.
 4. Implementar uma tarefa por vez.
-5. Testar a tarefa.
+5. Testar a tarefa ao final para ter certeza que deu certo e não teve regressão de códigoque já funcionavabem antes.
 6. Documentar o que mudou.
 
 Para mudancas que afetam contratos, defina primeiro:
@@ -163,6 +163,10 @@ Para mudancas que afetam contratos, defina primeiro:
 - comportamento esperado em erro;
 - impacto em Firestore;
 - impacto no firmware.
+
+# .venv
+
+Voce pode entrar e sair da .venv do backend e fazer intalações necessárias, adicionando no requirements.txt.
 
 ## Comandos uteis
 
@@ -226,3 +230,51 @@ O `README.md` da raiz e a documentacao principal para pessoas desenvolvedoras. A
 - colecoes Firestore;
 - fluxo SDD;
 - requisitos de ambiente.
+
+## Política de Git e commits
+
+* Nunca execute `git commit` automaticamente.
+* Nunca execute `git push` automaticamente.
+* Nunca crie branches sem autorização explícita do usuário.
+* Os comandos `git status` e `git diff` podem ser utilizados para inspeção quando necessário.
+* Não reverta, descarte ou sobrescreva alterações feitas pelo usuário sem autorização explícita.
+* Não utilize comandos destrutivos, como `git reset --hard`, `git clean -fd` ou equivalentes, sem autorização.
+* Ao finalizar uma atividade que altere arquivos, sugira uma mensagem de commit semântico em inglês, mas deixe a execução do commit para o usuário.
+* A sugestão deve ser apresentada em uma seção chamada exatamente `Suggested semantic commit`.
+* A mensagem sugerida deve representar somente as alterações realizadas na atividade atual.
+* Não inclua no commit sugerido funcionalidades que ainda não foram implementadas ou validadas.
+* Quando a atividade envolver áreas diferentes e independentes do projeto, informe se é recomendável separar as alterações em mais de um commit.
+
+### Formato recomendado
+
+```text
+<tipo>(<escopo>): <descrição curta em inglês>
+```
+
+### Exemplos adequados ao projeto
+
+```text
+feat(functions): trigger sensor processing on firestore events
+feat(alerts): detect invalid sensor event sequences
+feat(autocloud): analyze reservoir filling time anomalies
+fix(alerts): prevent duplicate alerts for the same sensor event
+fix(sensors): reject out-of-order reservoir events
+feat(firmware): add bounded offline sensor event buffer
+fix(buffer): preserve event order after network reconnection
+feat(llm): add Gemini provider for chatbot responses
+feat(llm): support configurable Ollama models
+refactor(llm): separate chatbot providers behind a common interface
+feat(reports): add report download from history page
+style(reports): improve PDF report layout and formatting
+feat(consumption): estimate water usage and cost
+feat(consumption): calculate pump energy consumption
+feat(mobile): configure Android build with Capacitor
+fix(mobile): handle report downloads on Android devices
+chore(config): move Firebase settings to environment variables
+fix(security): remove hardcoded Firebase credentials
+docs(specs): add AquaMonitor implementation backlog
+docs(readme): document Firebase Functions setup
+test(alerts): cover invalid sensor sequence scenarios
+test(functions): add Firestore event processing tests
+```
+
