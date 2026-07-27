@@ -51,6 +51,22 @@ Estas referencias foram consultadas apenas para planejar tecnologia atualizavel:
 
 Nenhuma dessas alteracoes existentes foi revertida.
 
+## Observacao sobre ambiente de desenvolvimento
+
+O desenvolvimento operacional do projeto deve ser considerado Linux/WSL Ubuntu. A auditoria de 2026-07-27 foi executada a partir de um notebook Windows com acesso ao workspace, mas a `.venv` existente em `backend/.venv` pertence ao ambiente Linux/WSL e nao deve ser recriada ou corrigida no Windows.
+
+Por isso, falhas relacionadas a importacao do backend e execucao da `.venv` no Windows devem ser tratadas como inconclusivas ate repetirmos a validacao no ambiente Linux oficial. Ja os problemas estaticos do frontend encontrados por `tsc`, como imports versionados em componentes `ui`, conflito local de tipo e `frontend/src/services/alerts.ts` contendo codigo server-side, continuam registrados como riscos provaveis porque nao dependem diretamente da `.venv`.
+
+Antes de iniciar alteracoes funcionais, a proxima sessao em Linux deve executar uma validacao de baseline:
+
+- `cd backend && source .venv/bin/activate && python -c "import app.main; print('backend import ok')"`
+- `cd backend && python -m compileall app`
+- `cd frontend && npm exec tsc -- --noEmit`
+- `cd frontend && npm run lint`
+- se aplicavel, `cd frontend && npm run build`
+
+Se essas validacoes divergirem da auditoria feita no Windows, este plano deve ser atualizado antes da implementacao.
+
 ## Descobertas principais
 
 ### Backend
@@ -889,4 +905,4 @@ Motivo: antes de implementar Functions e alertas, o projeto precisa ao menos sep
 
 Aguardar revisao e aprovacao deste planejamento.
 
-Depois da aprovacao, iniciar por `ATV-001` ou, se a prioridade absoluta for Firebase Functions, por `ATV-002` com escopo reduzido e teste de contrato.
+Depois da aprovacao e ja no ambiente Linux oficial, iniciar por uma validacao curta do baseline descrita em "Observacao sobre ambiente de desenvolvimento". Em seguida, iniciar `ATV-001` ou, se a prioridade absoluta for Firebase Functions, `ATV-002` com escopo reduzido e teste de contrato.
