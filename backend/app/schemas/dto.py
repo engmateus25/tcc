@@ -12,12 +12,15 @@ class ChatRequest(BaseModel):
     messages: List[ChatMessage] = Field(..., description="Histórico no formato OpenAI")
     stream: bool = False
     session_id: Optional[str] = None
+    provider: Optional[str] = None
 
 class ChatResponse(BaseModel):
     content: str
     model: Optional[str] = None
     provider: Optional[str] = None
     usage: Optional[Any] = None
+    session_id: Optional[str] = None
+    metadata: dict = Field(default_factory=dict)
 
 # ===== Reports =====
 class ReportRequest(BaseModel):
@@ -52,6 +55,9 @@ class AquaIntent(BaseModel):
         "count_and_duration_empty",# quantas vezes + quanto tempo vazia
         "count_and_duration_full", # quantas vezes + quanto tempo cheia
         "health_check",            # sensores apresentaram inconsistência?
+        "water_consumption",       # estimativa de consumo de agua/custo
+        "energy_consumption",      # energia/custo da bomba
+        "alerts_summary",          # resumo dos alertas abertos
         "smalltalk",               # quem é você / o que você faz / etc.
         "unknown",
     ] = "unknown"
@@ -62,10 +68,19 @@ class AquaIntent(BaseModel):
 
 class AgentRequest(BaseModel):
     question: str
+    session_id: Optional[str] = None
+    provider: Optional[str] = None
 
 class AgentResponse(BaseModel):
     answer: str
     intent: AquaIntent
+    provider: Optional[str] = None
+    model: Optional[str] = None
+    session_id: Optional[str] = None
+    usage: Optional[Any] = None
+    fallback_used: bool = False
+    llm_error: Optional[str] = None
+    metadata: dict = Field(default_factory=dict)
 
 
 # ==== Alerts / Cloud Function ====

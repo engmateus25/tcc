@@ -167,10 +167,21 @@ FILL_TIME_SLOW_FACTOR
 FILL_TIME_PERSISTENT_WINDOW
 SENSOR_EVENT_WEBHOOK_SECRET
 LLM_PROVIDER
+LLM_TEMPERATURE
+LLM_MAX_TOKENS
 OLLAMA_BASE_URL
 OLLAMA_MODEL
+OLLAMA_TIMEOUT_SECONDS
+GEMINI_API_KEY
+GEMINI_MODEL
+GEMINI_BASE_URL
+GEMINI_TIMEOUT_SECONDS
 OPENAI_API_KEY
 OPENAI_MODEL
+AGENT_RESPONSE_MODE
+AGENT_ALLOW_DETERMINISTIC_FALLBACK
+AGENT_SEND_RAW_EVENTS_TO_LLM
+AGENT_MAX_HISTORY_MESSAGES
 ENABLE_SCHEDULER
 SCHEDULE_CRON_WEEKLY
 SCHEDULE_CRON_MONTHLY
@@ -178,6 +189,39 @@ PDF_OUTPUT_DIR
 ```
 
 Observacao: nao versionar arquivos `.env`, chaves privadas ou credenciais Firebase Admin.
+
+### Chatbot e provedores LLM
+
+O backend possui uma fachada `LLMProvider` para selecionar o modelo por ambiente:
+
+- `LLM_PROVIDER=ollama`: usa Ollama local em `OLLAMA_BASE_URL`.
+- `LLM_PROVIDER=gemini`: usa Gemini API com `GEMINI_API_KEY`, mantida somente no backend.
+- `LLM_PROVIDER=openai`: usa OpenAI com `OPENAI_API_KEY`.
+
+O modelo local recomendado para sair do `qwen2:0.5b` e melhorar qualidade é `qwen3:4b-instruct`:
+
+```bash
+ollama pull qwen3:4b-instruct
+```
+
+Se o Ollama ainda nao estiver instalado:
+
+```bash
+curl -fsSL https://ollama.com/install.sh | sh
+ollama pull qwen3:4b-instruct
+```
+
+Para Gemini, preencha no backend:
+
+```text
+LLM_PROVIDER=gemini
+GEMINI_API_KEY=<sua-chave-do-Google-AI-Studio>
+GEMINI_MODEL=gemini-2.5-flash
+```
+
+O endpoint `POST /agent` monta contexto estruturado a partir de Firestore antes de chamar o modelo. Por padrao, `AGENT_RESPONSE_MODE=hybrid`: o backend tenta usar o LLM configurado e, se o provedor estiver indisponivel, retorna uma resposta deterministica com `fallback_used=true` e `llm_error` preenchido. Use `AGENT_RESPONSE_MODE=llm` e `AGENT_ALLOW_DETERMINISTIC_FALLBACK=0` quando quiser falhar explicitamente sem fallback.
+
+Por seguranca, `AGENT_SEND_RAW_EVENTS_TO_LLM=0` envia apenas agregados e resumos para provedores online. Defina `1` somente se for aceitavel enviar eventos recentes de sensor ao provedor configurado.
 
 ## Frontend
 

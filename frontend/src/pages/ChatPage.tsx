@@ -23,6 +23,10 @@ interface Message {
   content: string;
   timestamp: Date;
   status?: "normal" | "error";
+  provider?: string | null;
+  model?: string | null;
+  fallbackUsed?: boolean;
+  llmError?: string | null;
 }
 
 const quickQuestions = [
@@ -62,6 +66,7 @@ export function ChatPage() {
   ]);
   const [inputValue, setInputValue] = useState("");
   const [isTyping, setIsTyping] = useState(false);
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -105,13 +110,20 @@ export function ChatPage() {
     setIsTyping(true);
 
     try {
-      const res = await sendAgentQuestion(userMessage.content);
+      const res = await sendAgentQuestion(userMessage.content, sessionId);
+      if (res.session_id) {
+        setSessionId(res.session_id);
+      }
 
       const aiResponse: Message = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
         content: res.answer,
         timestamp: new Date(),
+        provider: res.provider,
+        model: res.model,
+        fallbackUsed: res.fallback_used,
+        llmError: res.llm_error,
       };
 
       setMessages((prev) => [...prev, aiResponse]);
@@ -146,6 +158,7 @@ export function ChatPage() {
           timestamp: new Date(),
         },
       ]);
+      setSessionId(null);
     }
   };
 
@@ -246,6 +259,14 @@ export function ChatPage() {
                     minute: "2-digit",
                   })}
                 </time>
+                {message.role === "assistant" && (message.provider || message.model || message.fallbackUsed) && (
+                  <span className="chat-bubble-meta">
+                    {message.fallbackUsed ? "fallback deterministico" : [message.provider, message.model].filter(Boolean).join(" · ")}
+                  </span>
+                )}
+                {message.llmError && (
+                  <span className="chat-bubble-warning">{message.llmError}</span>
+                )}
               </div>
             </motion.div>
           ))}

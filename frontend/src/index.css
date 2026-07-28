@@ -2472,6 +2472,22 @@ html {
   font-size: 11px;
 }
 
+.chat-bubble-meta,
+.chat-bubble-warning {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.chat-bubble-meta {
+  color: #64748b;
+}
+
+.chat-bubble-warning {
+  color: #b45309;
+}
+
 .chat-bubble-user {
   background: #2563eb;
   border-color: #2563eb;

@@ -90,7 +90,7 @@ Validacao apos ATV-001:
 - O endpoint `POST /alerts/sensor-event` existe em `backend/app/routers/alerts.py` e chama `process_new_sensor_event`.
 - Existe um router duplicado em `backend/app/routers/webhook_sensor.py`, mas ele nao e registrado no `main.py`.
 - `backend/app/schemas/dto.py` declara `SensorEventIn` duas vezes com o mesmo conteudo.
-- `ChatResponse` nao declara `session_id`, mas `backend/app/routers/chat.py` retorna esse campo.
+- `ChatResponse` agora declara `session_id`; `/llm/chat` e `/agent` retornam metadados de provider/model.
 - `backend/app/services/firestore.py` busca eventos da colecao `sensores` por `timestamp` e ordena cronologicamente, mas nao preserva `doc.id` na versao ativa de `fetch_sensor_events`.
 - Alertas em tempo real sao gravados em `alerts`, mas sem modelo padronizado, `event_id`, status, severidade, causas possiveis, deduplicacao ou idempotencia.
 - O AutoCloud existe em `backend/app/services/autocloud_core.py` e e usado por `sensor_anomaly.py` e `sensor_realtime.py`, mas analisa eventos individuais codificados como vetor, nao ciclos de enchimento baixo -> alto.
@@ -140,13 +140,12 @@ Validacao apos ATV-001:
 
 ### IA
 
-- `backend/app/services/llm.py` possui fachada simples para Ollama e OpenAI.
-- `backend/app/services/agent_langchain.py` usa diretamente `ChatOllama` para classificar intencao e responder com calculos sobre Firestore.
-- O provider configuravel (`LLM_PROVIDER`) so afeta `/llm/chat`, nao o agente analitico em `/agent`.
-- Nao ha Gemini.
-- Nao ha tratamento uniforme de timeout, indisponibilidade, quota, erro de autenticacao, fallback visivel, modelo respondente e telemetria entre provedores.
-- Modelo local atual esperado: `qwen2:0.5b`.
-- Candidato tecnico a segundo modelo, sujeito a aprovacao: `qwen3:4b-instruct`, Q4_K_M, cerca de 2.5 GB no Ollama, viavel para uma maquina com aproximadamente 8 GB livres. Nao deve ser baixado antes da aprovacao.
+- `backend/app/services/llm.py` possui fachada `LLMProvider` para Ollama, Gemini e OpenAI.
+- `backend/app/services/agent_langchain.py` usa contexto estruturado e a fachada LLM, mantendo fallback deterministico visivel.
+- O provider configuravel (`LLM_PROVIDER`) afeta `/llm/chat` e `/agent`; requests tambem podem enviar override opcional de provider.
+- Gemini foi implementado via REST com `GEMINI_API_KEY` no backend e `GEMINI_MODEL=gemini-2.5-flash`.
+- Timeout, indisponibilidade, quota, erro de autenticacao, fallback visivel, modelo respondente e metadata sao tratados de forma uniforme nos providers.
+- Modelo local recomendado: `qwen3:4b-instruct`; a maquina atual ainda precisa instalar Ollama antes do pull.
 
 ### Relatorios, consumo e mobile
 
@@ -163,7 +162,7 @@ Validacao apos ATV-001:
 - Server-side Firebase Function dentro de `frontend/src/services/alerts.ts`.
 - `SensorEventIn` duplicado em `backend/app/schemas/dto.py`.
 - Router duplicado `webhook_sensor.py` nao registrado.
-- `ChatResponse` sem `session_id`, apesar do router retornar esse campo.
+- `ChatResponse` sem `session_id` foi corrigido.
 - AutoCloud atual analisa eventos, nao ciclos de enchimento.
 - Backend de alerta nao recebe `document_id` e nao consegue ser idempotente por documento Firestore.
 - `fetch_sensor_events` ativo nao inclui `doc.id`, prejudicando rastreabilidade.
@@ -712,8 +711,8 @@ Motivo: o app ja exibe os alertas persistidos. O proximo passo mais seguro e est
 - Titulo: Abstracao `LLMProvider`.
 - Pendencias relacionadas: Ollama fraco, Gemini, fallback, sessoes, provedor selecionavel.
 - Objetivo: desacoplar o chatbot de um unico provedor.
-- Contexto encontrado no codigo: `/llm/chat` usa `llm.py` com Ollama/OpenAI; `/agent` usa `ChatOllama` diretamente.
-- Situacao atual: implementada localmente, aguardando validacao visual.
+- Contexto encontrado no codigo original: `/llm/chat` usava `llm.py` com Ollama/OpenAI; `/agent` usava `ChatOllama` diretamente.
+- Situacao atual: implementada localmente, aguardando validacao com provedores reais.
 - Proposta de solucao: criar interface comum para `OllamaProvider`, `OpenAIProvider` existente e futuro `GeminiProvider`; fazer agente analitico usar essa camada ou separar classificador deterministico/LLM.
 - Backend afetado: `llm.py`, `agent_langchain.py`, schemas de resposta.
 - Frontend afetado: `aiService`, ChatPage se exibir modelo/provedor.
@@ -727,7 +726,7 @@ Motivo: o app ja exibe os alertas persistidos. O proximo passo mais seguro e est
 - Plano de testes: provider Ollama mock, provider indisponivel, `/llm/chat`, `/agent`, sessoes.
 - Arquivos provavelmente afetados: `backend/app/services/llm.py`, `backend/app/services/agent_langchain.py`, `backend/app/schemas/dto.py`, `frontend/src/services/aiService.ts`.
 - Status: AGUARDANDO VALIDACAO.
-- Resultado da validacao local: `ChatPage` foi redesenhada com layout de altura/scroll proprio, perguntas rapidas em grid responsivo com cores clicaveis distintas do painel, bolhas de conversa, erro visual e composer com contraste/foco. `PumpControl` e atalhos da Home receberam classes visuais proprias para diferenciar campos acionaveis. `QuickStats` deixou de usar consumo diario fixo e passa a buscar media real de consumo em `/reports/summary?period=7d`; `useWaterSystem` estima o nivel visual a partir do ultimo evento real de sensor. `npm run lint` passou com warnings preexistentes de Fast Refresh em componentes UI; `npm run build` passou.
+- Resultado da validacao local: `llm.py` foi reestruturado com fachada `LLMProvider` e providers `OllamaProvider`, `GeminiProvider` e `OpenAIProvider`, selecionaveis por env ou override de request. `/llm/chat` e `/llm/chat/stream` usam a fachada, retornam `provider`, `model`, `session_id` e erros claros via `LLMProviderError`. `/agent` tambem usa essa camada, preserva sessao quando Firestore esta disponivel e devolve `fallback_used`/`llm_error` quando cai para resposta deterministica. Testes unitarios cobrem provider Ollama mockado, Gemini mockado, provider invalido, erro de chave/quota e endpoints diretos.
 - Resultado da validacao do usuario: _a preencher_.
 
 ### ATV-020 - Integrar Gemini via Google AI Studio
@@ -737,7 +736,7 @@ Motivo: o app ja exibe os alertas persistidos. O proximo passo mais seguro e est
 - Pendencias relacionadas: Google AI Studio/Gemini, chave em env, timeout, quota, autenticacao.
 - Objetivo: adicionar Gemini como provedor selecionavel pelo backend sem expor chave no frontend.
 - Contexto encontrado no codigo: nao ha Gemini; `requirements.txt` nao possui SDK Google GenAI especifico.
-- Situacao atual: nao implementado.
+- Situacao atual: implementada localmente, aguardando chave real Gemini.
 - Proposta de solucao: adicionar provider Gemini com `GEMINI_API_KEY`, `GEMINI_MODEL`, timeout, tratamento de 401/403/429/5xx, logs e metadata de modelo.
 - Backend afetado: provider LLM, requirements, env example.
 - Frontend afetado: apenas exibir provider/model se disponivel.
@@ -746,11 +745,12 @@ Motivo: o app ja exibe os alertas persistidos. O proximo passo mais seguro e est
 - Contratos e payloads envolvidos: mesmo contrato de chat de `ATV-019`.
 - Dependencias: `ATV-019`.
 - Riscos: custos/quota; modelo especifico pode mudar; fallback silencioso e proibido.
-- Perguntas pendentes: qual modelo Gemini aprovar para uso inicial? Candidato conservador deve ser escolhido no momento da implementacao a partir dos modelos oficiais disponiveis.
+- Perguntas pendentes: preencher `GEMINI_API_KEY` real e validar quota/latencia em uso do TCC.
 - Criterios de aceite: `LLM_PROVIDER=gemini` responde; chave ausente retorna erro claro; limite/quota tratado; frontend nao recebe chave.
 - Plano de testes: mock HTTP/SDK para sucesso, timeout, 401, 429, fallback aprovado/desativado.
 - Arquivos provavelmente afetados: `backend/app/services/llm.py`, `backend/requirements.txt`, `backend/.env.example`, `README.md`.
-- Status: AGUARDANDO RESPOSTA.
+- Status: AGUARDANDO VALIDACAO.
+- Resultado da validacao local: `GeminiProvider` foi implementado via REST da Gemini API usando `GEMINI_API_KEY` somente no backend, header `x-goog-api-key`, `GEMINI_MODEL=gemini-2.5-flash`, timeout configuravel, tratamento de 401/403, 429, 5xx e metadata de uso. Nao foi adicionado SDK novo ao `requirements.txt` porque `requests` ja atende ao contrato. Testes mockados cobrem sucesso, chave ausente e quota. Nao houve chamada real por ausencia de chave.
 - Resultado da validacao do usuario: _a preencher_.
 
 ### ATV-021 - Selecionar e configurar segundo modelo Ollama
@@ -759,9 +759,9 @@ Motivo: o app ja exibe os alertas persistidos. O proximo passo mais seguro e est
 - Titulo: Segundo modelo Ollama mais potente.
 - Pendencias relacionadas: modelo local atual fraco, 8 GB de RAM, familia Qwen.
 - Objetivo: permitir alternar entre modelo leve e modelo local mais capaz.
-- Contexto encontrado no codigo: `OLLAMA_MODEL=qwen2:0.5b` e `ChatOllama` usam env.
-- Situacao atual: suporte basico por env existe, mas sem orientacao de modelo e sem fallback.
-- Proposta de solucao: aprovar modelo antes de baixar. Candidato inicial: `qwen3:4b-instruct`, Q4_K_M, cerca de 2.5 GB no Ollama, melhor qualidade esperada que 0.5B, ainda viavel em 8 GB livres; comando proposto somente apos aprovacao: `ollama pull qwen3:4b-instruct`.
+- Contexto encontrado no codigo original: `OLLAMA_MODEL=qwen2:0.5b` e agente acoplado a Ollama local.
+- Situacao atual: implementada localmente, aguardando instalacao do Ollama/modelo.
+- Proposta de solucao: configurar `qwen3:4b-instruct` como modelo local recomendado, mantendo troca por env e comandos de instalacao/pull documentados.
 - Backend afetado: env example e documentacao; possivel ajuste de prompt/contexto.
 - Frontend afetado: nenhum direto.
 - Firmware afetado: nenhum.
@@ -769,11 +769,12 @@ Motivo: o app ja exibe os alertas persistidos. O proximo passo mais seguro e est
 - Contratos e payloads envolvidos: `OLLAMA_MODEL`, `OLLAMA_BASE_URL`.
 - Dependencias: `ATV-019` recomendada.
 - Riscos: desempenho pode ser lento; memoria real depende do sistema, contexto e quantizacao; qualidade tambem depende de prompt e dados.
-- Perguntas pendentes: a maquina alvo tem GPU ou apenas CPU? Aceita latencia maior em troca de qualidade?
-- Criterios de aceite: modelo aprovado documentado; troca por env; sem download automatico nesta etapa.
+- Perguntas pendentes: validar desempenho real apos instalar Ollama; a maquina local ainda nao possui `ollama` no PATH.
+- Criterios de aceite: modelo documentado; troca por env; comando de pull definido; backend retorna erro claro se Ollama/modelo nao estiver disponivel.
 - Plano de testes: perguntas analiticas conhecidas, indisponibilidade Ollama, comparacao com modelo atual.
 - Arquivos provavelmente afetados: `backend/.env.example`, `README.md`, possivelmente `backend/app/services/agent_langchain.py`.
-- Status: AGUARDANDO RESPOSTA.
+- Status: AGUARDANDO VALIDACAO.
+- Resultado da validacao local: `OLLAMA_MODEL` no exemplo passou para `qwen3:4b-instruct`, `OllamaProvider` trata conexao indisponivel, timeout e modelo nao encontrado com mensagem orientando `ollama pull qwen3:4b-instruct`. README documenta instalacao/pull. Nao foi possivel baixar o modelo porque `ollama` nao esta instalado no PATH desta maquina.
 - Resultado da validacao do usuario: _a preencher_.
 
 ### ATV-022 - Melhorar prompt, contexto e sessoes do chatbot
@@ -783,7 +784,7 @@ Motivo: o app ja exibe os alertas persistidos. O proximo passo mais seguro e est
 - Pendencias relacionadas: baixa capacidade de contexto, respostas insatisfatorias, historico de conversa.
 - Objetivo: melhorar resposta antes de atribuir o problema apenas ao tamanho do modelo.
 - Contexto encontrado no codigo: ChatPage usa `/agent`; `/llm/chat` persiste sessoes, mas nao e o fluxo principal da tela; agente busca Firestore e monta respostas deterministicas apos classificar intencao.
-- Situacao atual: parcialmente implementado.
+- Situacao atual: implementada localmente, aguardando validacao com perguntas reais.
 - Proposta de solucao: unificar ou coordenar sessao do ChatPage, adicionar contexto de sistema, limitar historico, recuperar dados relevantes e separar chatbot generico de agente analitico.
 - Backend afetado: `chat.py`, `chat_store.py`, `agent_langchain.py`, `llm.py`.
 - Frontend afetado: `ChatPage`, `aiService`.
@@ -792,11 +793,12 @@ Motivo: o app ja exibe os alertas persistidos. O proximo passo mais seguro e est
 - Contratos e payloads envolvidos: `session_id`, mensagens, `intent`, `provider`, `model`.
 - Dependencias: `ATV-019`.
 - Riscos: historico grande pode afetar latencia; dados sensiveis nao devem ser enviados para provedor externo sem aprovacao.
-- Perguntas pendentes: Gemini/OpenAI podem receber dados reais do sistema ou somente resumos anonimizados?
+- Perguntas pendentes: manter `AGENT_SEND_RAW_EVENTS_TO_LLM=0` para provedores online ou autorizar envio de eventos recentes quando for necessario diagnostico detalhado?
 - Criterios de aceite: sessao preservada; respostas indicam periodo/dados usados; erro de backend exibido com clareza.
 - Plano de testes: reabrir sessao, perguntas de resumo, perguntas fora de escopo, backend/LLM indisponivel.
 - Arquivos provavelmente afetados: `backend/app/routers/chat.py`, `backend/app/services/chat_store.py`, `backend/app/services/agent_langchain.py`, `frontend/src/pages/ChatPage.tsx`, `frontend/src/services/aiService.ts`.
-- Status: PENDENTE.
+- Status: AGUARDANDO VALIDACAO.
+- Resultado da validacao local: `/agent` agora coordena sessao com `chat_sessions`, monta contexto estruturado com eventos de sensores, consumo de agua, energia da bomba e alertas, limita historico por `AGENT_MAX_HISTORY_MESSAGES`, usa prompt de sistema para impedir invencao de numeros e inclui periodo/base usada. O modo `hybrid` tenta LLM e retorna fallback deterministico identificado se o provedor falhar. `ChatPage` envia `session_id`, guarda a sessao e exibe provider/model ou fallback na bolha da resposta. Testes cobrem modo deterministico, uso do LLM com contexto, fallback explicito, `/agent` e `/llm/chat`.
 - Resultado da validacao do usuario: _a preencher_.
 
 ### ATV-023 - Refinar interface do aplicativo
@@ -884,8 +886,8 @@ Motivo: o app ja exibe os alertas persistidos. O proximo passo mais seguro e est
 - Definir potencia da bomba em kW e preco da energia por kWh.
 - Aprovar se alertas serao lidos diretamente do Firestore pelo frontend ou via backend.
 - Aprovar se dados reais do sistema podem ser enviados ao Gemini/OpenAI ou somente a Ollama local.
-- Escolher modelo Gemini inicial.
-- Aprovar ou rejeitar o candidato `qwen3:4b-instruct` antes de qualquer download.
+- Validar `GEMINI_API_KEY` real e quota/latencia do `gemini-2.5-flash`.
+- Instalar Ollama e baixar `qwen3:4b-instruct` para validacao local.
 - Decidir se a plataforma Android sera adicionada neste repositorio e qual `appId` definitivo.
 
 ## Perguntas objetivas pendentes
