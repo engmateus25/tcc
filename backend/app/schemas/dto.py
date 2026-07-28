@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from typing import List, Literal, Optional, Any
 from datetime import datetime, timezone
 
@@ -83,6 +83,16 @@ class SensorEventIn(BaseModel):
     source: Optional[str] = "unknown"
     raw_path: Optional[str] = None
     received_at: Optional[datetime] = None
+    timestamp_missing: bool = False
+
+    @model_validator(mode="before")
+    @classmethod
+    def mark_missing_timestamp(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            normalized = dict(data)
+            normalized["timestamp_missing"] = not bool(normalized.get("timestamp"))
+            return normalized
+        return data
 
     @field_validator("sensor", "estado", mode="before")
     @classmethod
@@ -126,3 +136,15 @@ class SensorEventProcessResponse(BaseModel):
     alerts_created: List[dict] = Field(default_factory=list)
     cycle_created: Optional[Any] = None
     autocloud: dict = Field(default_factory=dict)
+
+
+class AlertListResponse(BaseModel):
+    total: int
+    alerts: List[dict] = Field(default_factory=list)
+
+
+class AlertAcknowledgeResponse(BaseModel):
+    id: str
+    acknowledged: bool
+    status: str
+    acknowledged_at: datetime

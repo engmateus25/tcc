@@ -94,6 +94,8 @@ Rotas principais:
 - `GET /reports/weekly?period=7d`: relatorio PDF de 7, 30 ou 90 dias.
 - `GET /reports/monthly`: relatorio PDF mensal.
 - `GET /alerts/sensors`: analise de alertas no periodo.
+- `GET /alerts?period=7d&status=open&severity=warning`: consulta de alertas persistidos.
+- `PATCH /alerts/{alert_id}/ack`: marca um alerta persistido como reconhecido.
 - `POST /alerts/sensor-event`: webhook para novo evento de sensor.
 
 Camadas:
@@ -141,6 +143,13 @@ FIREBASE_CREDENTIALS_JSON
 FIRESTORE_SENSORS_COLLECTION
 FIRESTORE_ALERTS_COLLECTION
 FIRESTORE_SENSOR_EVENT_PROCESSING_COLLECTION
+FIRESTORE_FILLING_CYCLES_COLLECTION
+SENSOR_DUPLICATE_WINDOW_SECONDS
+SENSOR_OUT_OF_ORDER_TOLERANCE_SECONDS
+MIN_PLAUSIBLE_DRAIN_TIME_SECONDS
+FILL_TIME_MIN_SAMPLES
+FILL_TIME_SLOW_FACTOR
+FILL_TIME_PERSISTENT_WINDOW
 SENSOR_EVENT_WEBHOOK_SECRET
 LLM_PROVIDER
 OLLAMA_BASE_URL
@@ -241,6 +250,8 @@ Uso atual:
 - Firestore `comandos`: comandos/acionamentos da bomba.
 - Firestore `chat_sessions`: sessoes e mensagens do chat no backend.
 - Firestore `sensor_event_processing`: controle tecnico de processamento idempotente por evento.
+- Firestore `alerts`: alertas padronizados com `event_id`, `type`, `severity`, `status`, causas possiveis e metadados.
+- Firestore `filling_cycles`: ciclos validos `baixo subiu -> alto subiu` com `fill_time_seconds`.
 - MQTT `bomba/controle`: comandos enviados pelo app.
 - MQTT `bomba/estado`: status lido pelo app quando publicado.
 
@@ -261,6 +272,10 @@ O webhook `POST /alerts/sensor-event` aceita o payload legado do firmware e o pa
 ```
 
 Quando `SENSOR_EVENT_WEBHOOK_SECRET` estiver definido no backend, a chamada deve enviar o header `X-AquaMonitor-Webhook-Secret`. O backend usa `event_id`, `raw_path` ou `document_id` como chave idempotente e registra o processamento em `sensor_event_processing`.
+
+Depois da idempotencia, o backend aplica regras deterministicas antes de qualquer analise temporal. Eventos com alerta bloqueante, como duplicidade, timestamp ausente, fora de ordem, repeticao suspeita do sensor baixo ou esvaziamento rapido demais, nao alimentam ciclos nem a analise de tempo de enchimento.
+
+O ciclo de enchimento persistido considera `baixo subiu` como inicio e `alto subiu` como fim. O campo `fill_time_seconds` alimenta a analise temporal de enchimento, que retorna `insufficient_data` com poucos ciclos e gera alertas como `slow_fill_cycle`, `persistent_fill_time_shift` ou `new_fill_time_cluster` quando a duracao fica fora da linha de base.
 
 ## Firebase Functions
 
@@ -387,4 +402,5 @@ Para firmware, validar no Arduino IDE ou ambiente equivalente com placa ESP32 e 
 - O frontend ja escuta Firestore para ultimo evento de sensor.
 - O controle da bomba usa MQTT diretamente do frontend.
 - O backend le Firestore para relatorios, alertas e agente IA.
+- O backend persiste alertas padronizados e ciclos de enchimento validos; a exibicao desses alertas no app ainda e pendencia de frontend.
 - A Firebase Function de alertas esta estruturada em `functions/src/index.ts`, com build/test locais. Emulator e deploy ainda precisam de projeto Firebase, Firebase CLI e secrets configurados.

@@ -49,6 +49,7 @@ def test_schema_normalizes_legacy_payload():
     assert event.sensor == "baixo"
     assert event.estado == "desceu"
     assert event.timestamp.tzinfo is not None
+    assert event.timestamp_missing is True
 
 
 def test_schema_rejects_invalid_sensor():

@@ -152,6 +152,10 @@ def fetch_sensor_events(period: str) -> List[Dict]:
     events: List[Dict] = []
     for doc in query.stream():
         data = doc.to_dict()
+        raw_path = f"{SENSORS_COLLECTION}/{doc.id}"
+        data.setdefault("document_id", doc.id)
+        data.setdefault("raw_path", raw_path)
+        data.setdefault("event_id", raw_path)
         events.append(data)
 
     return events

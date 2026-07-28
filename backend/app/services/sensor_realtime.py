@@ -1,179 +1,91 @@
-import os
-from datetime import datetime
 from threading import Lock
-from typing import Any, Dict, Optional
-import numpy as np
-from firebase_admin import firestore
-from .autocloud_core import AutoCloud
-from .firestore import _init_firebase_admin_once
+from typing import Any, Dict, List
+
+from .alerts_store import save_alerts
+from .autocloud_fill_time import analyze_fill_time_cycle
+from .filling_cycles import FillingCycleTracker, save_filling_cycle
 from .sensor_event_processing import (
     mark_sensor_event_failed,
     mark_sensor_event_processed,
     reserve_sensor_event_processing,
 )
-
-
-ALERTS_COLLECTION = os.getenv("FIRESTORE_ALERTS_COLLECTION", "alerts")
+from .sensor_rules import (
+    evaluate_sensor_event_rules,
+    event_blocks_cycle_processing,
+)
 
 
 class SensorRealtimeEngine:
     """
-    Mantém um AutoCloud em memória + estado atual dos sensores.
-    É usado pelo webhook para processar CADA evento novo.
+    Processa eventos de sensor em tempo real.
+
+    A ordem e intencional:
+    1. regras deterministicas;
+    2. persistencia deduplicada de alertas;
+    3. extracao de ciclo baixo subiu -> alto subiu;
+    4. analise temporal de fill_time_seconds.
     """
 
-    def __init__(self, m: float = 2.5, rare_min_count: int = 3):
-        self.auto = AutoCloud(m)
+    def __init__(self, max_history_events: int = 200):
         self.lock = Lock()
-
-        self.last_timestamp_by_sensor: Dict[str, datetime] = {}
-        self.current_state: Dict[str, Optional[str]] = {
-            "baixo": None,
-            "alto": None,
-        }
-
-        # Contagem por classe para tentar marcar classes raras
-        self.class_counts: Dict[int, int] = {}
-        self.rare_min_count = rare_min_count
-
-    # ---------- ENCODE EVENTO EM VETOR NUMÉRICO ----------
-
-    def _encode_event(self, event: Dict[str, Any]) -> np.ndarray:
-        sensor_str = (event.get("sensor") or "").strip().lower()
-        estado_str = (event.get("estado") or "").strip().lower()
-        ts: datetime = event["timestamp"]  # já garantido pelo Pydantic
-
-        # 0 = baixo, 1 = alto
-        sensor_num = 1.0 if sensor_str == "alto" else 0.0
-
-        # -1 = desceu, +1 = subiu
-        estado_num = 1.0 if estado_str == "subiu" else -1.0
-
-        last_ts = self.last_timestamp_by_sensor.get(sensor_str)
-        if last_ts is None:
-            delta_t = 0.0
-        else:
-            delta_t = (ts - last_ts).total_seconds()
-
-        self.last_timestamp_by_sensor[sensor_str] = ts
-
-        delta_t_feat = np.log1p(delta_t)  # log(1 + x) para suavizar
-
-        return np.array([sensor_num, estado_num, delta_t_feat], dtype=float)
-
-    # ---------- REGRAS FÍSICAS (baixo/alto, subiu/desceu) ----------
-
-    def _check_rule_based(self, event: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        sensor = (event.get("sensor") or "").strip().lower()
-        estado = (event.get("estado") or "").strip().lower()
-        ts: datetime = event["timestamp"]
-
-        prev_low = self.current_state.get("baixo")
-        prev_high = self.current_state.get("alto")
-
-        alert: Optional[Dict[str, Any]] = None
-
-        # regra 1: ALTO subiu mas BAIXO ainda não subiu
-        if sensor == "alto" and estado == "subiu":
-            if prev_low is not None and prev_low != "subiu":
-                alert = {
-                    "tipo": "inconsistencia_sequencia",
-                    "descricao": (
-                        "Sensor ALTO 'subiu' enquanto o sensor BAIXO ainda não "
-                        "estava 'subiu'. Isso é inconsistente com o enchimento da caixa."
-                    ),
-                    "evento_problema": event,
-                    "estado_anterior": {"baixo": prev_low, "alto": prev_high},
-                    "timestamp": ts,
-                }
-
-        # regra 2: BAIXO desceu mas ALTO ainda está subido
-        if sensor == "baixo" and estado == "desceu":
-            if prev_high == "subiu":
-                alert = {
-                    "tipo": "inconsistencia_sequencia",
-                    "descricao": (
-                        "Sensor BAIXO 'desceu' enquanto o sensor ALTO ainda estava "
-                        "'subiu'. Isso sugere leitura incorreta ou problema na boia alta."
-                    ),
-                    "evento_problema": event,
-                    "estado_anterior": {"baixo": prev_low, "alto": prev_high},
-                    "timestamp": ts,
-                }
-
-        # Atualiza estado atual
-        if sensor in self.current_state:
-            self.current_state[sensor] = estado
-
-        return alert
-
-    # ---------- SALVAR ALERTA NO FIRESTORE ----------
-
-    def _save_alert(self, alert: Dict[str, Any]) -> str:
-        _init_firebase_admin_once()
-        db = firestore.client()
-        _, ref = db.collection(ALERTS_COLLECTION).add(alert)
-        return ref.id
-
-    # ---------- PROCESSAR EVENTO ÚNICO (CHAMADO PELO WEBHOOK) ----------
+        self.max_history_events = max_history_events
+        self.recent_events: List[Dict[str, Any]] = []
+        self.cycle_tracker = FillingCycleTracker()
 
     def process_event(self, event: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Processa um único evento (sensor/estado/timestamp).
-        Retorna:
-           {
-             "class_index": int,
-             "rule_alert": {...} | None,
-             "autocloud_alert": {...} | None
-           }
-        """
         with self.lock:
-            x = self._encode_event(event)
-            self.auto.run(x)
-            class_idx = int(self.auto.classIndex[-1])
+            rule_alerts = evaluate_sensor_event_rules(event, self.recent_events)
+            blocks_cycle = event_blocks_cycle_processing(rule_alerts)
 
-            # atualiza contagem da classe
-            self.class_counts[class_idx] = self.class_counts.get(class_idx, 0) + 1
+            cycle = None
+            autocloud_result: Dict[str, Any] = {
+                "used": False,
+                "reason": "cycle_not_complete",
+            }
 
-            # regra simples: primeira vez que uma classe aparece -> potencial anomalia
-            autocloud_alert: Optional[Dict[str, Any]] = None
-            if self.class_counts[class_idx] <= self.rare_min_count and class_idx != 0:
-                autocloud_alert = {
-                    "tipo": "autocloud_anomalia",
-                    "classe": class_idx,
-                    "descricao": (
-                        "Evento associado a uma nuvem de dados rara segundo o AutoCloud. "
-                        "Pode caracterizar um comportamento atípico do sistema."
-                    ),
-                    "evento": event,
+            historical_cycles = list(self.cycle_tracker.completed_cycles)
+            if blocks_cycle:
+                autocloud_result = {
+                    "used": False,
+                    "reason": "deterministic_rule_alert",
                 }
+            else:
+                cycle = self.cycle_tracker.process_event(event)
+                if cycle:
+                    autocloud_result = analyze_fill_time_cycle(
+                        cycle,
+                        historical_cycles,
+                    )
 
-            rule_alert = self._check_rule_based(event)
+            self._remember_event(event)
 
-        # fora do lock, grava os alerts (se existirem)
-        alerts_created = []
-        if rule_alert is not None:
-            alert_id = self._save_alert(rule_alert)
-            alerts_created.append({"id": alert_id, "tipo": rule_alert.get("tipo")})
-        if autocloud_alert is not None:
-            alert_id = self._save_alert(autocloud_alert)
-            alerts_created.append({"id": alert_id, "tipo": autocloud_alert.get("tipo")})
+        alerts_to_save = list(rule_alerts)
+        autocloud_alert = autocloud_result.get("alert")
+        if autocloud_alert:
+            alerts_to_save.append(autocloud_alert)
+
+        alerts_created = save_alerts(alerts_to_save) if alerts_to_save else []
+        cycle_created = save_filling_cycle(cycle) if cycle else None
 
         return {
-            "class_index": class_idx,
-            "rule_alert": rule_alert,
-            "autocloud_alert": autocloud_alert,
+            "rule_alerts": rule_alerts,
             "alerts_created": alerts_created,
+            "cycle_created": cycle_created,
+            "autocloud": _public_autocloud_result(autocloud_result),
         }
 
+    def _remember_event(self, event: Dict[str, Any]) -> None:
+        self.recent_events.append(event)
+        if len(self.recent_events) > self.max_history_events:
+            self.recent_events = self.recent_events[-self.max_history_events :]
 
-# Singleton global usado pelo webhook
-_engine = SensorRealtimeEngine(m=2.5)
+
+_engine = SensorRealtimeEngine()
 
 
 def process_new_sensor_event(event: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Processa um evento de sensor com idempotência persistida no Firestore.
+    Processa um evento de sensor com idempotencia persistida no Firestore.
     """
     reservation = reserve_sensor_event_processing(event)
 
@@ -201,7 +113,6 @@ def process_new_sensor_event(event: Dict[str, Any]) -> Dict[str, Any]:
 
     try:
         engine_result = _engine.process_event(event_with_identity)
-        autocloud_alert = engine_result.get("autocloud_alert")
         result = {
             "processed": True,
             "duplicate": False,
@@ -210,15 +121,15 @@ def process_new_sensor_event(event: Dict[str, Any]) -> Dict[str, Any]:
             "processing_status": "processed",
             "payload_hash_mismatch": False,
             "alerts_created": engine_result.get("alerts_created") or [],
-            "cycle_created": None,
-            "autocloud": {
-                "used": True,
-                "class_index": engine_result.get("class_index"),
-                "alert_created": autocloud_alert is not None,
-            },
+            "cycle_created": engine_result.get("cycle_created"),
+            "autocloud": engine_result.get("autocloud") or {},
         }
         mark_sensor_event_processed(reservation, result)
         return result
     except Exception as exc:
         mark_sensor_event_failed(reservation, exc)
         raise
+
+
+def _public_autocloud_result(result: Dict[str, Any]) -> Dict[str, Any]:
+    return {key: value for key, value in result.items() if key != "alert"}

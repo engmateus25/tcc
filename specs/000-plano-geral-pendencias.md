@@ -178,19 +178,16 @@ Validacao apos ATV-001:
 
 ## Ordem tecnica recomendada
 
-Atualizacao apos implementacao local de `ATV-003`, `ATV-005` e `ATV-006`:
+Atualizacao apos implementacao local de `ATV-008`, `ATV-009`, `ATV-010` e `ATV-011`:
 
-1. `ATV-008` + `ATV-011`: implementar regras deterministicas e, na mesma sequencia, padronizar a persistencia/consulta dos alertas gerados por essas regras.
-2. `ATV-009` + `ATV-010`: extrair ciclos de enchimento validos e aplicar AutoCloud sobre `fill_time_seconds`.
-3. `ATV-015` + `ATV-017`: definir estado confirmado da bomba via MQTT e usar esse contrato para estimar energia.
+1. `ATV-012`: exibir alertas no aplicativo usando o modelo persistente de `ATV-011`.
+2. `ATV-015` + `ATV-017`: definir estado confirmado da bomba via MQTT e usar esse contrato para estimar energia.
+3. `ATV-016` + `ATV-018`: calcular consumo de agua a partir dos ciclos validos e melhorar relatorios/download no historico.
 4. `ATV-014`: adicionar buffer offline no firmware usando `event_id`/idempotencia ja disponiveis.
-5. `ATV-016`: calcular consumo de agua a partir dos ciclos validos.
-6. `ATV-018`: melhorar relatorios e download no historico, ja podendo incluir alertas, ciclos, agua e energia se as atividades anteriores estiverem concluidas.
-7. `ATV-012`: exibir alertas no aplicativo usando o modelo persistente de `ATV-011`.
-8. `ATV-013`: organizar configuracoes e secrets por ambiente antes de mobile/deploy real.
-9. `ATV-019` + `ATV-020` + `ATV-021` + `ATV-022`: refatorar provedores LLM, integrar Gemini/modelo Ollama aprovado e melhorar prompt/sessoes.
-10. `ATV-023`: refinar interface quando dados reais de alertas, bomba, consumo e relatorios estiverem disponiveis.
-11. `ATV-024`: configurar Android depois de ambiente, relatorios e URLs estarem estabilizados.
+5. `ATV-013`: organizar configuracoes e secrets por ambiente antes de mobile/deploy real.
+6. `ATV-019` + `ATV-020` + `ATV-021` + `ATV-022`: refatorar provedores LLM, integrar Gemini/modelo Ollama aprovado e melhorar prompt/sessoes.
+7. `ATV-023`: refinar interface quando dados reais de alertas, bomba, consumo e relatorios estiverem disponiveis.
+8. `ATV-024`: configurar Android depois de ambiente, relatorios e URLs estarem estabilizados.
 
 Justificativa: a baseline, o contrato de sensores, a autenticacao do webhook e a idempotencia ja foram implementados e commitados. As proximas atividades foram reordenadas para evitar dependencias ainda ausentes e reduzir retrabalho entre backend, Functions, firmware e frontend.
 
@@ -198,21 +195,20 @@ Justificativa: a baseline, o contrato de sensores, a autenticacao do webhook e a
 
 Grupos recomendados a partir do estado atual:
 
-- Grupo concluido localmente: `ATV-003`, `ATV-005`, `ATV-006`. Observacao: aguardam validacao/commit do usuario; emulador Firebase segue como validacao pendente.
-- Grupo A: `ATV-008`, `ATV-011`. Dependencias atendidas: `ATV-007`. Observacao: `ATV-011` pode padronizar diretamente os alertas criados pelas novas regras deterministicas.
-- Grupo B: `ATV-009`, `ATV-010`. Dependencia anterior: concluir `ATV-008`. Observacao: devem compartilhar fixtures de ciclos e datasets temporais.
-- Grupo C: `ATV-015`, `ATV-017`. Dependencias atendidas: nenhuma pendencia bloqueante. Observacao: energia depende de estado confirmado da bomba, entao `ATV-015` vem primeiro no mesmo lote.
+- Grupo concluido localmente: `ATV-003`, `ATV-005`, `ATV-006`, `ATV-008`, `ATV-009`, `ATV-010`, `ATV-011`. Observacao: aguardam validacao/commit do usuario; emulador Firebase segue como validacao pendente.
+- Grupo A: `ATV-012`. Dependencia atendida: `ATV-011`. Observacao: agora o app pode consumir alertas padronizados do backend.
+- Grupo B: `ATV-015`, `ATV-017`. Dependencias atendidas: nenhuma pendencia bloqueante. Observacao: energia depende de estado confirmado da bomba, entao `ATV-015` vem primeiro no mesmo lote.
+- Grupo C: `ATV-016`, `ATV-018`. Dependencias atendidas para agua: `ATV-009`; idealmente concluir `ATV-017` antes de incluir energia completa nos relatorios.
 - Grupo D: `ATV-014`. Dependencias atendidas: `ATV-002` e `ATV-007`. Observacao: pode ser feito isoladamente porque altera firmware e politica de buffer.
-- Grupo E: `ATV-016`, `ATV-018`. Dependencias anteriores: `ATV-009`, e idealmente `ATV-017` para relatorios completos. Observacao: consumo de agua alimenta relatorios; download pode entrar no mesmo lote se os dados estiverem prontos.
-- Grupo F: `ATV-019`, `ATV-020`, `ATV-021`, `ATV-022`. Dependencia anterior: decisao do usuario sobre Gemini/modelo local antes de `ATV-020`/`ATV-021`. Observacao: `ATV-019` deve abrir esse lote.
-- Grupo G: `ATV-012`, `ATV-023`. Dependencias anteriores: `ATV-011` para alertas reais e, para refinamento amplo da UI, `ATV-015`, `ATV-016`, `ATV-017` e `ATV-018`.
-- Grupo H: `ATV-013`, `ATV-024`. Dependencia anterior para Android: `ATV-013` e URL/HTTPS definidos. Observacao: configuracao por ambiente deve vir antes de validar mobile.
+- Grupo E: `ATV-019`, `ATV-020`, `ATV-021`, `ATV-022`. Dependencia anterior: decisao do usuario sobre Gemini/modelo local antes de `ATV-020`/`ATV-021`. Observacao: `ATV-019` deve abrir esse lote.
+- Grupo F: `ATV-013`, `ATV-024`. Dependencia anterior para Android: `ATV-013` e URL/HTTPS definidos. Observacao: configuracao por ambiente deve vir antes de validar mobile.
+- Grupo G: `ATV-023`. Dependencias anteriores: alertas, bomba, consumo e relatorios integrados.
 
 ## Proxima atividade implementavel apos aprovacao
 
-Primeiro grupo recomendado agora: `ATV-008` e `ATV-011`.
+Primeiro grupo recomendado agora: `ATV-012`.
 
-Motivo: o contrato de eventos, a autenticacao do webhook, a idempotencia, o harness pytest e a estrutura Functions ja estao implementados localmente. O proximo passo mais seguro e transformar essas bases em regras deterministicas de alerta e persistir/consultar os alertas em modelo padronizado.
+Motivo: o backend ja gera, persiste, consulta e reconhece alertas padronizados. O proximo passo mais direto e exibir esses alertas no aplicativo antes de expandir consumo, energia e relatorios.
 
 ## Backlog tecnico
 
@@ -417,8 +413,8 @@ Motivo: o contrato de eventos, a autenticacao do webhook, a idempotencia, o harn
 - Titulo: Regras deterministicas de sequencia dos sensores.
 - Pendencias relacionadas: sensor baixo repetido antes do alto, alto seguido rapidamente por baixo, eventos duplicados/atrasados/fora de ordem.
 - Objetivo: detectar anomalias logicas sem AutoCloud e sem diagnostico conclusivo.
-- Contexto encontrado no codigo: regras atuais verificam apenas incoerencias simples de estado baixo/alto.
-- Situacao atual: parcialmente implementado, mas insuficiente.
+- Contexto encontrado no codigo: regras antigas verificavam apenas incoerencias simples de estado baixo/alto dentro de `sensor_realtime.py` e `sensor_anomaly.py`.
+- Situacao atual: implementada localmente com motor deterministico dedicado.
 - Proposta de solucao: criar motor de regras configuravel que usa historico recente, timestamps, doc ids, tolerancias, janela de duplicidade e `MIN_PLAUSIBLE_DRAIN_TIME_SECONDS`.
 - Backend afetado: novo servico ou refatoracao de `sensor_realtime.py` e `sensor_anomaly.py`.
 - Frontend afetado: futuro consumo de alertas.
@@ -427,11 +423,12 @@ Motivo: o contrato de eventos, a autenticacao do webhook, a idempotencia, o harn
 - Contratos e payloads envolvidos: alertas de tipos `duplicate_event`, `unexpected_low_repeat`, `implausible_drain_time`, `out_of_order_event`, `missing_timestamp`.
 - Dependencias: `ATV-007`.
 - Riscos: falsos positivos se o estado inicial da caixa for desconhecido; precisa severidade e hipoteses, nao diagnostico.
-- Perguntas pendentes: qual intervalo minimo plausivel de alto -> baixo para o reservatorio real?
+- Perguntas pendentes: qual intervalo minimo plausivel de alto -> baixo para o reservatorio real? O default local ficou em 60 segundos ate haver medicao real.
 - Criterios de aceite: casos esperados geram alerta unico com causas possiveis e metadados; eventos invalidos nao alimentam AutoCloud.
 - Plano de testes: cenarios 1 a 12 da lista obrigatoria, com fixtures cronologicas e fora de ordem.
 - Arquivos provavelmente afetados: `backend/app/services/sensor_rules.py`, `backend/app/services/sensor_realtime.py`, `backend/app/services/sensor_anomaly.py`, `backend/.env.example`, `backend/tests/*`.
-- Status: PENDENTE.
+- Status: AGUARDANDO VALIDACAO.
+- Resultado da validacao local: criado `sensor_rules.py` com alertas `duplicate_event`, `unexpected_low_repeat`, `implausible_drain_time`, `out_of_order_event`, `missing_timestamp` e inconsistencias fisicas adicionais. Eventos com alerta bloqueante nao alimentam ciclo nem analise temporal. Testes unitarios cobrem duplicidade, repeticao do sensor baixo, esvaziamento rapido, evento fora de ordem e timestamp ausente.
 - Resultado da validacao do usuario: _a preencher_.
 
 ### ATV-009 - Extrair e validar ciclos de enchimento
@@ -441,8 +438,8 @@ Motivo: o contrato de eventos, a autenticacao do webhook, a idempotencia, o harn
 - Pendencias relacionadas: AutoCloud temporal, consumo de agua, relatorios.
 - Objetivo: transformar eventos confiaveis em ciclos com duracao de enchimento.
 - Contexto encontrado no codigo: AutoCloud atual nao trabalha com ciclos; consumo de agua e energia sao mocks.
-- Situacao atual: nao implementado.
-- Proposta de solucao: parear `baixo` indicando inicio de enchimento com `alto` indicando fim, validar ordem, timestamp, duplicidade e anomalias logicas antes de persistir ciclo.
+- Situacao atual: implementada localmente.
+- Proposta de solucao: parear `baixo subiu` indicando inicio do trecho medido de enchimento com `alto subiu` indicando fim, validar ordem, timestamp, duplicidade e anomalias logicas antes de persistir ciclo.
 - Backend afetado: servico de ciclos, Firestore service.
 - Frontend afetado: historico e relatorios no futuro.
 - Firmware afetado: nenhum direto.
@@ -463,11 +460,12 @@ Motivo: o contrato de eventos, a autenticacao do webhook, a idempotencia, o harn
 
 - Dependencias: `ATV-008`.
 - Riscos: sem estado inicial, primeiro ciclo pode ser incompleto; eventos fora de ordem exigem reprocessamento.
-- Perguntas pendentes: qual evento exato representa inicio de enchimento no firmware atual: `baixo desceu` ou `baixo subiu`?
+- Perguntas pendentes: confirmacao fisica em bancada ainda e desejavel, mas pelo firmware atual `baixo desceu` liga a bomba e `baixo subiu` representa a agua chegando ao sensor baixo; por isso o ciclo baixo -> alto usa `baixo subiu`.
 - Criterios de aceite: ciclo completo valido persiste duracao; ciclo com evento invalido nao persiste como valido.
 - Plano de testes: ciclo completo, baixo duplicado, alto sem baixo, baixo sem alto, timestamp ausente, fora de ordem.
 - Arquivos provavelmente afetados: `backend/app/services/filling_cycles.py`, `backend/app/services/sensor_realtime.py`, `backend/tests/*`, `README.md`.
-- Status: PENDENTE.
+- Status: AGUARDANDO VALIDACAO.
+- Resultado da validacao local: criado `filling_cycles.py` com extracao pura de ciclos, tracker em tempo real e persistencia deduplicada em `filling_cycles`. Testes cobrem ciclo completo `baixo subiu -> alto subiu`, evento invalido que nao alimenta ciclo e duracao negativa/fora de ordem rejeitada.
 - Resultado da validacao do usuario: _a preencher_.
 
 ### ATV-010 - Integrar AutoCloud a analise temporal de enchimento
@@ -477,20 +475,21 @@ Motivo: o contrato de eventos, a autenticacao do webhook, a idempotencia, o harn
 - Pendencias relacionadas: aumento gradual, mudanca persistente, ciclo lento, novo agrupamento distante.
 - Objetivo: usar AutoCloud ou estrategia equivalente em cima de `fill_time_seconds`, nao eventos crus.
 - Contexto encontrado no codigo: `AutoCloud` existe, mas usa atributos `[sensor, estado, delta_t]` e estado global de classe.
-- Situacao atual: parcialmente implementado em objeto diferente do desejado.
-- Proposta de solucao: criar pipeline temporal que recebe ciclos validos, define minimo de dados, normalizacao, outliers, treino/inferencia e explicacao do resultado.
+- Situacao atual: implementada localmente com pipeline temporal sobre `fill_time_seconds`.
+- Proposta de solucao: criar pipeline temporal que recebe ciclos validos, define minimo de dados, linha de base, outliers, inferencia e explicacao do resultado.
 - Backend afetado: `autocloud_core.py`, novo servico temporal, alertas.
 - Frontend afetado: exibicao de explicacoes e alertas.
 - Firmware afetado: nenhum direto.
 - Firebase ou servicos externos afetados: colecoes `filling_cycles`, `alerts`, possivel `autocloud_models` ou snapshots.
 - Contratos e payloads envolvidos: alertas `slow_fill_cycle`, `persistent_fill_time_shift`, `new_fill_time_cluster`.
 - Dependencias: `ATV-009`.
-- Riscos: poucos dados podem gerar ruido; estado global atual de `AutoCloud` pode afetar instancias; divisao treino/inferencia precisa ser clara.
+- Riscos: poucos dados podem gerar ruido; por isso a implementacao retorna `insufficient_data` antes de atingir a amostra minima configurada.
 - Perguntas pendentes: quantos ciclos historicos reais existem hoje para calibrar? Podemos reprocessar historico?
 - Criterios de aceite: com poucos dados, resposta e `insufficient_data`; com aumento gradual fixture, alerta e explicacao aparecem; eventos invalidos nao entram.
 - Plano de testes: cenarios 13 a 15 obrigatorios, dataset pequeno, dataset normal, dataset com tendencia, reprocessamento historico.
-- Arquivos provavelmente afetados: `backend/app/services/autocloud_core.py`, `backend/app/services/autocloud_fill_time.py`, `backend/app/services/filling_cycles.py`, `backend/tests/*`.
-- Status: PENDENTE.
+- Arquivos provavelmente afetados: `backend/app/services/autocloud_fill_time.py`, `backend/app/services/filling_cycles.py`, `backend/tests/*`.
+- Status: AGUARDANDO VALIDACAO.
+- Resultado da validacao local: criado `autocloud_fill_time.py` com linha de base temporal para ciclos validos, retorno `insufficient_data`, alertas `slow_fill_cycle`, `persistent_fill_time_shift` e `new_fill_time_cluster`. Testes cobrem poucos dados, ciclo lento e aumento persistente.
 - Resultado da validacao do usuario: _a preencher_.
 
 ### ATV-011 - Persistir e consultar alertas inteligentes
@@ -499,11 +498,11 @@ Motivo: o contrato de eventos, a autenticacao do webhook, a idempotencia, o harn
 - Titulo: Modelo persistente de alertas e consulta.
 - Pendencias relacionadas: alertas no aplicativo, anomalias, nao repetir alerta para mesmo evento.
 - Objetivo: padronizar alertas para backend e frontend.
-- Contexto encontrado no codigo: `sensor_realtime.py` grava dicionarios livres em `alerts`; frontend nao le alertas persistidos.
-- Situacao atual: parcialmente implementado.
+- Contexto encontrado no codigo: `sensor_realtime.py` gravava dicionarios livres em `alerts`; frontend ainda nao le alertas persistidos.
+- Situacao atual: implementada localmente no backend; exibicao no frontend continua em `ATV-012`.
 - Proposta de solucao: criar schema de alerta com `id`, `event_id`, `type`, `severity`, `title`, `message`, `detected_at`, `sensor_timestamp`, `status`, `possible_causes`, `metadata`, `acknowledged`, `acknowledged_at`.
 - Backend afetado: schemas, service de alertas, rotas GET/PATCH.
-- Frontend afetado: service Firestore/API e componentes de lista/ack.
+- Frontend afetado: futuro service Firestore/API e componentes de lista/ack em `ATV-012`.
 - Firmware afetado: nenhum direto.
 - Firebase ou servicos externos afetados: colecao `alerts`.
 - Contratos e payloads envolvidos:
@@ -525,8 +524,9 @@ Motivo: o contrato de eventos, a autenticacao do webhook, a idempotencia, o harn
 - Perguntas pendentes: alertas devem ser apenas in-app ou tambem push notification?
 - Criterios de aceite: alerta unico por evento/tipo; consulta por status/severidade; acknowledge persistido.
 - Plano de testes: alerta criado, duplicidade bloqueada, ack, listagem por periodo.
-- Arquivos provavelmente afetados: `backend/app/routers/alerts.py`, `backend/app/schemas/dto.py`, `backend/app/services/alerts_store.py`, `frontend/src/services/*`, `frontend/src/components/*`, `frontend/src/pages/HomePage.tsx`.
-- Status: PENDENTE.
+- Arquivos provavelmente afetados: `backend/app/routers/alerts.py`, `backend/app/schemas/dto.py`, `backend/app/services/alerts_store.py`, `backend/tests/*`.
+- Status: AGUARDANDO VALIDACAO.
+- Resultado da validacao local: criado `alerts_store.py` com id estavel por `event_id:type`, normalizacao de alerta, persistencia deduplicada por `DocumentReference.create()`, consulta por periodo/status/severidade e acknowledge. Foram adicionadas rotas `GET /alerts` e `PATCH /alerts/{alert_id}/ack`. Testes cobrem id estavel e defaults do modelo.
 - Resultado da validacao do usuario: _a preencher_.
 
 ### ATV-012 - Exibir alertas em tempo real no aplicativo
@@ -923,24 +923,31 @@ Motivo: o contrato de eventos, a autenticacao do webhook, a idempotencia, o harn
 - `cd frontend && npm run build`: passou com avisos nao bloqueantes de Browserslist/Baseline desatualizados e chunks acima de 500 kB.
 - `git diff --check`: passou.
 
+## Validacoes executadas apos ATV-008, ATV-009, ATV-010 e ATV-011
+
+- `cd backend && source .venv/bin/activate && pytest`: passou com 21 testes.
+- `cd backend && source .venv/bin/activate && python -m compileall app tests`: passou.
+- `cd backend && source .venv/bin/activate && python -c "import app.main; print('backend import ok')"`: passou.
+- `git diff --check`: passou.
+
 ## Testes nao executados nesta etapa
 
 - Firebase Emulator: nao executado porque ainda falta definir project alias real, Firebase CLI/secrets e estrategia de URL para o backend local/homologacao.
 - Deploy Firebase/backend/mobile: fora de escopo nesta etapa.
 - Cypress E2E e Vitest unitario do frontend: nao executados nesta revalidacao de ambiente; foram priorizados `tsc`, `lint` e `build`.
+- Testes frontend nao foram repetidos neste lote porque as mudancas foram apenas no backend e documentacao.
 - Compilacao Arduino: nao ha ambiente Arduino/ESP32 configurado nesta sessao.
 
 ## Riscos gerais
 
-- Sem idempotencia, Functions com retry podem duplicar alertas e contaminar AutoCloud.
-- Sem `device_id`/`event_id`, eventos offline e reprocessamento historico ficam frageis.
-- Sem validacao de ciclos, AutoCloud pode aprender ruido, duplicidade e eventos fora de ordem.
-- Sem separar secrets/configuracao, ha risco de expor credenciais e confundir configuracao publica com segredo.
-- Sem corrigir build frontend, qualquer melhoria visual ou mobile sera dificil de validar.
+- Sem `device_id`/`event_id` gerado no firmware, eventos offline e reprocessamento historico ainda ficam mais frageis que o ideal.
+- Sem validar Firebase Emulator/deploy, o fluxo Firestore -> Function -> backend ainda precisa de prova integrada fora dos testes locais.
+- Sem separar todos os secrets/configuracoes por ambiente, ha risco de expor credenciais e confundir configuracao publica com segredo.
+- Sem estado confirmado da bomba via MQTT, calculo de energia e relatorios de acionamento ainda dependem de premissas incompletas.
 - Sem confirmar hosting do backend, a Function pode ficar sem URL confiavel para chamada.
 
 ## Proximo passo recomendado
 
-Aguardar revisao e commit do lote `ATV-003`, `ATV-005` e `ATV-006`.
+Aguardar revisao e commit do lote `ATV-008`, `ATV-009`, `ATV-010` e `ATV-011`.
 
-Depois disso, iniciar `ATV-008` + `ATV-011`: regras deterministicas de alerta e modelo padronizado de persistencia/consulta dos alertas.
+Depois disso, iniciar `ATV-012`: exibicao dos alertas persistidos no aplicativo.

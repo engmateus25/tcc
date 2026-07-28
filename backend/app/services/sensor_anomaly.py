@@ -5,6 +5,9 @@ import numpy as np
 
 from .firestore import fetch_sensor_events
 from .autocloud_core import AutoCloud
+from .autocloud_fill_time import analyze_fill_time_cycle
+from .filling_cycles import extract_filling_cycles
+from .sensor_rules import evaluate_sensor_event_rules
 
 
 # ---------------------------
@@ -94,55 +97,10 @@ def detect_rule_based_inconsistencies(events: List[Dict]) -> List[Dict[str, Any]
     Retorna uma lista de alertas com explicação.
     """
     alerts: List[Dict[str, Any]] = []
-
-    # Estado atual de cada sensor (inicialmente desconhecido)
-    current_state = {
-        "baixo": None,  # "subiu" | "desceu" | None
-        "alto": None,
-    }
-
+    history: List[Dict[str, Any]] = []
     for ev in events:
-        sensor = (ev.get("sensor") or "").strip().lower()
-        estado = (ev.get("estado") or "").strip().lower()
-        ts: datetime = ev.get("timestamp")
-
-        # Estado anterior (antes de aplicar este evento)
-        prev_low = current_state.get("baixo")
-        prev_high = current_state.get("alto")
-
-        # Regras:
-
-        # 1) Se o sensor ALTO subir, o sensor BAIXO já deveria estar subido.
-        if sensor == "alto" and estado == "subiu":
-            if prev_low is not None and prev_low != "subiu":
-                alerts.append({
-                    "tipo": "inconsistencia_sequencia",
-                    "descricao": (
-                        "Sensor ALTO subiu enquanto o sensor BAIXO ainda não havia subido. "
-                        "Isso não é fisicamente coerente com o enchimento da caixa."
-                    ),
-                    "evento_problema": ev,
-                    "estado_anterior": {"baixo": prev_low, "alto": prev_high},
-                    "timestamp": ts,
-                })
-
-        # 2) Se o sensor BAIXO descer, o sensor ALTO não pode estar subido.
-        if sensor == "baixo" and estado == "desceu":
-            if prev_high == "subiu":
-                alerts.append({
-                    "tipo": "inconsistencia_sequencia",
-                    "descricao": (
-                        "Sensor BAIXO desceu enquanto o sensor ALTO ainda estava subido. "
-                        "Isso sugere leitura incorreta ou problema na boia alta."
-                    ),
-                    "evento_problema": ev,
-                    "estado_anterior": {"baixo": prev_low, "alto": prev_high},
-                    "timestamp": ts,
-                })
-
-        # Atualiza o estado atual com o novo evento:
-        if sensor in current_state:
-            current_state[sensor] = estado
+        alerts.extend(evaluate_sensor_event_rules(ev, history))
+        history.append(ev)
 
     return alerts
 
@@ -155,46 +113,47 @@ def detect_intelligent_alerts(period: str = "7d") -> Dict[str, Any]:
     """
     Pipeline completo:
       1. Busca eventos no Firestore (já em ordem cronológica)
-      2. Aplica AutoCloud para aprender padrões típicos de sequência
-      3. Aplica regras lógicas de consistência física
+      2. Aplica regras deterministicas de consistencia fisica
+      3. Extrai ciclos validos de enchimento
+      4. Analisa fill_time_seconds sobre os ciclos validos
       4. Junta tudo em um dicionário de retorno
     """
     events = fetch_sensor_events(period=period)
 
-    # 2. AutoCloud
-    auto, labels = run_autocloud_on_events(events, m=2.5)
-
-    # Ideia simples de anomalia: classes muito raras (poucas ocorrências)
-    class_counts: Dict[int, int] = {}
-    for c in labels:
-        class_counts[c] = class_counts.get(c, 0) + 1
-
-    # Define como "raro" tudo que aparece menos que, por ex., 1% dos eventos
-    total = max(len(labels), 1)
-    rare_threshold = max(int(0.01 * total), 1)
-    rare_classes = {c for c, count in class_counts.items() if count <= rare_threshold}
-
-    autocloud_anomalies: List[Dict[str, Any]] = []
-    for ev, c in zip(events, labels):
-        if c in rare_classes:
-            autocloud_anomalies.append({
-                "tipo": "autocloud_anomalia",
-                "classe": int(c),
-                "descricao": (
-                    "Evento associado a uma nuvem de dados rara segundo o AutoCloud, "
-                    "potencialmente caracterizando um comportamento atípico do sistema."
-                ),
-                "evento": ev,
-            })
-
-    # 3. Regras físicas
     rule_alerts = detect_rule_based_inconsistencies(events)
+    invalid_event_ids = {
+        alert["event_id"]
+        for alert in rule_alerts
+        if (alert.get("metadata") or {}).get("blocks_cycle_processing")
+    }
+
+    cycles = extract_filling_cycles(events, invalid_event_ids=invalid_event_ids)
+    historical_cycles: List[Dict[str, Any]] = []
+    fill_time_analysis: List[Dict[str, Any]] = []
+    fill_time_alerts: List[Dict[str, Any]] = []
+
+    for cycle in cycles:
+        result = analyze_fill_time_cycle(cycle, historical_cycles)
+        alert = result.get("alert")
+        if alert:
+            fill_time_alerts.append(alert)
+        fill_time_analysis.append(
+            {
+                "cycle_id": cycle["cycle_id"],
+                "fill_time_seconds": cycle["fill_time_seconds"],
+                "analysis": {key: value for key, value in result.items() if key != "alert"},
+            }
+        )
+        historical_cycles.append(cycle)
 
     return {
         "periodo_analisado": period,
         "total_eventos": len(events),
-        "total_classes_autocloud": len(class_counts),
-        "rare_classes": list(map(int, rare_classes)),
-        "autocloud_anomalies": autocloud_anomalies,
+        "total_cycles": len(cycles),
+        "total_classes_autocloud": None,
+        "rare_classes": [],
+        "autocloud_anomalies": fill_time_alerts,
         "rule_based_alerts": rule_alerts,
+        "filling_cycles": cycles,
+        "fill_time_analysis": fill_time_analysis,
     }

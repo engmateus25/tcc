@@ -2,7 +2,13 @@ import os
 from secrets import compare_digest
 
 from fastapi import APIRouter, Header, HTTPException, Query, status
-from app.schemas.dto import SensorEventIn, SensorEventProcessResponse
+from app.schemas.dto import (
+    AlertAcknowledgeResponse,
+    AlertListResponse,
+    SensorEventIn,
+    SensorEventProcessResponse,
+)
+from app.services.alerts_store import acknowledge_alert, list_alerts
 from app.services.sensor_anomaly import detect_intelligent_alerts
 from app.services.sensor_realtime import process_new_sensor_event
 
@@ -20,6 +26,27 @@ def get_sensor_alerts(
     """
     result = detect_intelligent_alerts(period=period)
     return result
+
+
+@router.get("/alerts", response_model=AlertListResponse)
+def get_persisted_alerts(
+    period: str = Query("7d", description="Periodo para consulta (ex: '7d', '30d')"),
+    status_filter: str | None = Query(None, alias="status"),
+    severity: str | None = Query(None),
+    limit: int = Query(100, ge=1, le=500),
+):
+    alerts = list_alerts(
+        period=period,
+        status=status_filter,
+        severity=severity,
+        limit=limit,
+    )
+    return {"total": len(alerts), "alerts": alerts}
+
+
+@router.patch("/alerts/{alert_id}/ack", response_model=AlertAcknowledgeResponse)
+def acknowledge_persisted_alert(alert_id: str):
+    return acknowledge_alert(alert_id)
 
 def _validate_sensor_event_secret(secret_header: str | None) -> None:
     expected_secret = (os.getenv("SENSOR_EVENT_WEBHOOK_SECRET") or "").strip()
