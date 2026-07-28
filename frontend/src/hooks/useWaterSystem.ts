@@ -33,7 +33,6 @@ function isPumpMode(value: unknown): value is PumpMode {
   );
 }
 
-// Mock inicial (até chegar dados reais)
 const initialState: State = {
   waterLevel: 42,
   isPumpOn: false,
@@ -63,6 +62,7 @@ export function useWaterSystem() {
         setState((s) => ({
           ...s,
           lastSensor: ls,
+          waterLevel: estimateWaterLevelFromSensorEvent(ls, s.waterLevel),
           isConnected: { ...s.isConnected, firebase: true },
         }));
       },
@@ -132,7 +132,7 @@ export function useWaterSystem() {
   }, [state.isPumpOn]);
 
   return useMemo(() => ({
-    waterLevel: state.waterLevel,      // por enquanto mock; quando tiver tópico de nível, a gente liga aqui
+    waterLevel: state.waterLevel,
     isPumpOn: state.isPumpOn,
     pumpMode: state.pumpMode,
     lastSensor: state.lastSensor!,
@@ -141,6 +141,17 @@ export function useWaterSystem() {
     isConnected: state.isConnected,    // usado pela status bar (Firebase/MQTT)
     togglePump,
   }), [state, togglePump]);
+}
+
+function estimateWaterLevelFromSensorEvent(
+  event: LastSensor,
+  fallback: number,
+): number {
+  if (event.name === "baixo" && event.action === "desceu") return 15;
+  if (event.name === "baixo" && event.action === "subiu") return 55;
+  if (event.name === "alto" && event.action === "subiu") return 96;
+  if (event.name === "alto" && event.action === "desceu") return 62;
+  return fallback;
 }
 
 function applyPumpStateMessage(state: State, message: PumpStateMessage): State {

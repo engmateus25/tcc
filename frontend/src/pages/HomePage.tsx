@@ -92,7 +92,7 @@ export function HomePage() {
       <div className="grid grid-cols-2 gap-4 mt-8">
         <Button
           variant="outline"
-          className="h-16 flex flex-col gap-1 border-2"
+          className="home-action-button home-action-history"
           onClick={() => history.push("/history")}
         >
           <BarChart3 className="w-6 h-6" />
@@ -101,7 +101,7 @@ export function HomePage() {
 
         <Button
           variant="outline"
-          className="h-16 flex flex-col gap-1 border-2"
+          className="home-action-button home-action-chat"
           onClick={() => history.push("/chat")}
         >
           <MessageSquare className="w-6 h-6" />

@@ -1,4 +1,4 @@
-const BASE_URL = import.meta.env.VITE_AI_BASE_URL || "http://127.0.0.1:8000";
+import { API_BASE_URL } from "./env";
 
 export type AlertSeverity = "info" | "warning" | "error" | "critical" | string;
 export type AlertStatus = "open" | "acknowledged" | string;
@@ -51,7 +51,7 @@ export async function fetchAlerts(query: AlertQuery = {}): Promise<AlertListResp
 
   let response: Response;
   try {
-    response = await fetch(`${BASE_URL}/alerts?${params.toString()}`);
+    response = await fetch(`${API_BASE_URL}/alerts?${params.toString()}`);
   } catch {
     throw new Error("Não foi possível conectar ao backend de alertas");
   }
@@ -66,7 +66,7 @@ export async function acknowledgeAlert(
 ): Promise<AlertAcknowledgeResponse> {
   let response: Response;
   try {
-    response = await fetch(`${BASE_URL}/alerts/${encodeURIComponent(alertId)}/ack`, {
+    response = await fetch(`${API_BASE_URL}/alerts/${encodeURIComponent(alertId)}/ack`, {
       method: "PATCH",
     });
   } catch {

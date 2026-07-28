@@ -16,22 +16,20 @@ export function PumpControl({
   statusMessage,
 }: PumpControlProps) {
   return (
-    <Card className="p-4">
-      <p className="text-sm text-slate-600 mb-3">Controle da Bomba</p>
+    <Card className="pump-card">
+      <p className="pump-card-title">Controle da Bomba</p>
       <motion.button
-        className={`w-full py-6 rounded-lg flex flex-col items-center justify-center gap-2 transition-colors ${
-          isOn 
-            ? "bg-green-600 text-white" 
-            : "bg-slate-300 text-slate-700"
+        className={`pump-toggle-button ${
+          isOn ? "pump-toggle-button-on" : "pump-toggle-button-off"
         }`}
         onClick={onToggle}
         disabled={isPending}
         whileTap={{ scale: 0.95 }}
       >
         <Power className="w-8 h-8" />
-        <span className="text-xl">{isPending ? "..." : isOn ? "ON" : "OFF"}</span>
+        <span>{isPending ? "..." : isOn ? "ON" : "OFF"}</span>
       </motion.button>
-      <p className="mt-2 min-h-8 text-xs text-slate-500">
+      <p className="pump-card-status">
         {statusMessage || "Estado alterado apenas após confirmação."}
       </p>
     </Card>

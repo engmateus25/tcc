@@ -1,16 +1,51 @@
 import { Card } from "./ui/card";
 import { Droplets, Power, TrendingUp } from "lucide-react";
+import { useEffect, useState } from "react";
+import { fetchReportSummary } from "../services/reportService";
 
 interface QuickStatsProps {
   waterLevel: number;
   isPumpOn: boolean;
-  dailyUsage?: number; // em litros - mock por enquanto
+  dailyUsage?: number | null;
 }
 
-export function QuickStats({ waterLevel, isPumpOn, dailyUsage = 1250 }: QuickStatsProps) {
-  // Estimativa de capacidade do reservatório (mock - pode vir do Firebase)
+export function QuickStats({ waterLevel, isPumpOn, dailyUsage = null }: QuickStatsProps) {
+  const [averageDailyUsage, setAverageDailyUsage] = useState<number | null>(dailyUsage);
+
+  useEffect(() => {
+    if (dailyUsage !== null && dailyUsage !== undefined) {
+      setAverageDailyUsage(dailyUsage);
+      return;
+    }
+
+    let active = true;
+    async function loadUsage() {
+      try {
+        const summary = await fetchReportSummary("7d");
+        if (!active) return;
+        setAverageDailyUsage(summary.water_consumption.average_liters_per_day);
+      } catch {
+        if (active) setAverageDailyUsage(null);
+      }
+    }
+
+    void loadUsage();
+    const interval = window.setInterval(() => {
+      void loadUsage();
+    }, 60000);
+
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, [dailyUsage]);
+
   const tankCapacityLiters = 5000;
   const currentLiters = Math.round((waterLevel / 100) * tankCapacityLiters);
+  const usageText =
+    averageDailyUsage !== null
+      ? `${Math.round(averageDailyUsage).toLocaleString("pt-BR")}L`
+      : "--";
 
   return (
     <div className="grid grid-cols-3 gap-3 mb-6">
@@ -42,9 +77,9 @@ export function QuickStats({ waterLevel, isPumpOn, dailyUsage = 1250 }: QuickSta
       <Card className="p-3 bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200">
         <div className="flex flex-col items-center text-center">
           <TrendingUp className="w-5 h-5 text-purple-600 mb-1" />
-          <p className="text-xs text-purple-600 mb-1">Hoje</p>
-          <p className="text-lg text-purple-800">{dailyUsage}L</p>
-          <p className="text-xs text-purple-500">consumido</p>
+          <p className="text-xs text-purple-600 mb-1">Média/dia</p>
+          <p className="text-lg text-purple-800">{usageText}</p>
+          <p className="text-xs text-purple-500">últimos 7 dias</p>
         </div>
       </Card>
     </div>

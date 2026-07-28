@@ -1,9 +1,9 @@
-const BASE_URL = import.meta.env.VITE_AI_BASE_URL || "http://127.0.0.1:8000";
+import { API_BASE_URL } from "./env";
 
 export type Role = "system" | "user" | "assistant";
 
 export async function sendChat(messages: {role: Role; content: string}[], sessionId?: string) {
-  const resp = await fetch(`${BASE_URL}/llm/chat`, {
+  const resp = await fetch(`${API_BASE_URL}/llm/chat`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ messages, session_id: sessionId || null }),
@@ -36,7 +36,7 @@ export interface AgentResponse {
 export async function sendAgentQuestion(
   question: string
 ): Promise<AgentResponse> {
-  const resp = await fetch(`${BASE_URL}/agent`, {
+  const resp = await fetch(`${API_BASE_URL}/agent`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ question }),

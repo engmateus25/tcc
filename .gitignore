@@ -16,9 +16,13 @@ node_modules/
 
 /firmware/TCC.ino/TCC_2_sensores/*
 /firmware/TCC.ino/TCC_2_sensores/
+/firmware/TCC.ino/TCC_Final/secrets.h
 
 /frontend/node_modules/
 /frontend/dist/
+/frontend/.env
+/frontend/.env.*
+!/frontend/.env.example
 /functions/node_modules/
 /functions/lib/
 /functions/.env

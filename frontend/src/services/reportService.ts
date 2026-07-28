@@ -1,4 +1,4 @@
-const BASE_URL = import.meta.env.VITE_AI_BASE_URL || "http://127.0.0.1:8000";
+import { API_BASE_URL } from "./env";
 
 export type ReportPeriod = "7d" | "30d" | "90d";
 
@@ -61,7 +61,7 @@ export async function fetchReportSummary(
 ): Promise<ReportSummary> {
   let response: Response;
   try {
-    response = await fetch(`${BASE_URL}/reports/summary?period=${period}`);
+    response = await fetch(`${API_BASE_URL}/reports/summary?period=${period}`);
   } catch {
     throw new Error("Não foi possível conectar ao backend de relatórios");
   }
@@ -74,7 +74,7 @@ export async function fetchReportSummary(
 export async function downloadReportPdf(period: ReportPeriod): Promise<void> {
   let response: Response;
   try {
-    response = await fetch(`${BASE_URL}/reports/weekly?period=${period}`);
+    response = await fetch(`${API_BASE_URL}/reports/weekly?period=${period}`);
   } catch {
     throw new Error("Não foi possível conectar ao backend de relatórios");
   }

@@ -116,6 +116,14 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
+### Para que outros aparelhos possam se conectar a aplicação via IP do host
+
+```bash
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+Juntamente com a exposição do IP do host em .env de backend e frontend.
+
 Por padrao, a API fica em:
 
 ```text
@@ -185,7 +193,7 @@ Pontos principais:
 - `frontend/src/hooks/useWaterSystem.ts`: estado central, Firestore realtime e MQTT.
 - `frontend/src/hooks/useAlerts.ts`: polling dos alertas persistidos no backend.
 - `frontend/src/services/firestoreService.ts`: consultas e listeners da colecao `sensores`.
-- `frontend/src/services/mqttService.ts`: conexao MQTT e publicacao em `bomba/controle`.
+- `frontend/src/services/mqttService.ts`: conexao MQTT configuravel por ambiente e publicacao em `bomba/controle/v2`.
 - `frontend/src/services/aiService.ts`: chamadas ao backend.
 - `frontend/src/services/alerts.ts`: consulta e reconhecimento de alertas inteligentes.
 
@@ -197,6 +205,12 @@ npm install
 npm run dev
 ```
 
+### Para que outros aparelhos possam se conectar a aplicação via IP do host
+
+```bash
+npm run dev -- --host 0.0.0.0
+```
+
 Comandos disponiveis:
 
 ```bash
@@ -206,12 +220,31 @@ npm run test.unit
 npm run test.e2e
 ```
 
-Variavel de ambiente relevante:
+Crie `frontend/.env` a partir de `frontend/.env.example` antes de iniciar o app. Variaveis principais:
 
 ```text
 VITE_AI_BASE_URL=http://127.0.0.1:8000
+VITE_FIREBASE_API_KEY=
+VITE_FIREBASE_AUTH_DOMAIN=
+VITE_FIREBASE_DATABASE_URL=
+VITE_FIREBASE_PROJECT_ID=
+VITE_FIREBASE_STORAGE_BUCKET=
+VITE_FIREBASE_MESSAGING_SENDER_ID=
+VITE_FIREBASE_APP_ID=
+VITE_FIREBASE_MEASUREMENT_ID=
+VITE_MQTT_URL=wss://broker.hivemq.com:8884/mqtt
+VITE_MQTT_CLIENT_PREFIX=aquamonitor_web
+VITE_MQTT_USERNAME=
+VITE_MQTT_PASSWORD=
+VITE_MQTT_CONTROL_TOPIC=bomba/controle
+VITE_MQTT_CONTROL_V2_TOPIC=bomba/controle/v2
+VITE_MQTT_STATE_TOPIC=bomba/estado
 VITE_MQTT_PUBLISH_LEGACY_CONTROL=0
 ```
+
+As variaveis `VITE_*` ficam publicas no bundle do frontend. Elas nao devem conter credenciais administrativas; proteja o Firebase com regras, dominios autorizados e App Check.
+
+Se `frontend/.env` ainda nao existir, a interface abre em modo degradado com Firebase desconectado e registra no console quais variaveis faltam. Para dados reais de sensores, historico e alertas, preencha as variaveis Firebase antes de iniciar o Vite.
 
 Durante desenvolvimento com Vite, o backend permite por padrao as origens locais `http://localhost:5173`, `http://127.0.0.1:5173`, `http://localhost:5174` e `http://127.0.0.1:5174`, alem das origens Ionic `8100`.
 
@@ -233,7 +266,12 @@ Responsabilidades do ESP32:
 - ler sensores de nivel baixo e alto;
 - registrar eventos na colecao Firestore `sensores`;
 - registrar comandos na colecao Firestore `comandos`;
+- manter buffer offline limitado em RAM para reenvio de eventos/comandos ao Firestore;
 - sincronizar horario via NTP.
+
+Antes de compilar `TCC_Final/TCC_Final.ino`, copie `firmware/TCC.ino/TCC_Final/secrets.h.example` para `firmware/TCC.ino/TCC_Final/secrets.h` e preencha Wi-Fi, Firebase Web API key, URLs das colecoes e MQTT. O `secrets.h` real fica ignorado pelo Git.
+
+O buffer offline do firmware usa `OFFLINE_BUFFER_CAPACITY` e `FIRESTORE_RETRY_INTERVAL_MS`. Quando o limite e atingido, o firmware descarta o evento mais antigo, registra no Serial e preserva os mais recentes para reenvio em ordem apos reconexao.
 
 Topicos MQTT atuais:
 

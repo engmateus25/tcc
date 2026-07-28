@@ -2,30 +2,40 @@
 #include <HTTPClient.h>
 #include <time.h>
 #include <PubSubClient.h>
+#include "secrets.h"
+
+#ifndef DEVICE_ID
+#define DEVICE_ID "esp32-reservatorio-01"
+#endif
+
+#ifndef OFFLINE_BUFFER_CAPACITY
+#define OFFLINE_BUFFER_CAPACITY 32
+#endif
+
+#ifndef FIRESTORE_RETRY_INTERVAL_MS
+#define FIRESTORE_RETRY_INTERVAL_MS 5000
+#endif
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
 
 // ===================== WIFI / MQTT =====================
-const char* ssid = "eng.mateus";
-const char* password = "casamelo09";
+const char* ssid = WIFI_SSID;
+const char* password = WIFI_PASSWORD;
 
-const char* mqtt_server = "broker.hivemq.com";
-const int mqtt_port = 1883;
-const char* MQTT_CONTROL_TOPIC = "bomba/controle";
-const char* MQTT_CONTROL_V2_TOPIC = "bomba/controle/v2";
-const char* MQTT_STATE_TOPIC = "bomba/estado";
+const char* mqtt_server = MQTT_BROKER_HOST;
+const int mqtt_port = MQTT_BROKER_PORT;
+const char* MQTT_CONTROL_TOPIC = MQTT_CONTROL_TOPIC_VALUE;
+const char* MQTT_CONTROL_V2_TOPIC = MQTT_CONTROL_V2_TOPIC_VALUE;
+const char* MQTT_STATE_TOPIC = MQTT_STATE_TOPIC_VALUE;
 
 // ===================== FIRESTORE =====================
 // Coleção sensores
-const char* FIREBASE_SENSORES_URL =
-  "https://firestore.googleapis.com/v1/projects/tcc1-155fa/databases/(default)/documents/sensores";
+const char* FIREBASE_SENSORES_URL = FIREBASE_SENSORES_COLLECTION_URL;
 // Coleção comandos
-const char* FIREBASE_COMANDOS_URL =
-  "https://firestore.googleapis.com/v1/projects/tcc1-155fa/databases/(default)/documents/comandos";
+const char* FIREBASE_COMANDOS_URL = FIREBASE_COMANDOS_COLLECTION_URL;
 
-const char* FIREBASE_API_KEY =
-  "AIzaSyD-3x3bJH3r2n0hyngOOC7_WOuvPBHo_T4";
+const char* FIREBASE_API_KEY = FIREBASE_WEB_API_KEY;
 
 // ===================== NTP / HORÁRIO (UTC) =====================
 const char* NTP_SERVER = "pool.ntp.org";
@@ -88,6 +98,20 @@ bool autoDesiredOn = false;
 // Para logs/eventos
 bool lastFisico = LOW;
 
+// ===================== BUFFER FIRESTORE OFFLINE =====================
+struct PendingFirestoreWrite {
+  String label;
+  String url;
+  String payload;
+  String eventId;
+  uint8_t attempts;
+};
+
+PendingFirestoreWrite firestoreBuffer[OFFLINE_BUFFER_CAPACITY];
+size_t firestoreBufferHead = 0;
+size_t firestoreBufferCount = 0;
+unsigned long lastFirestoreFlushAttempt = 0;
+
 // ===================== PROTÓTIPOS =====================
 void conectarMQTT();
 void callbackMQTT(char* topic, byte* payload, unsigned int length);
@@ -129,6 +153,20 @@ void publicarEstadoBomba(
 String gerarCommandId(const String& prefix);
 String extrairStringJson(const String& json, const String& key);
 bool extrairBoolJson(const String& json, const String& key, bool fallback);
+bool postarFirestore(const String& url, const String& jsonPayload, const String& label);
+void enviarOuEnfileirarFirestore(
+  const String& label,
+  const String& url,
+  const String& jsonPayload,
+  const String& eventId
+);
+void enfileirarFirestore(
+  const String& label,
+  const String& url,
+  const String& jsonPayload,
+  const String& eventId
+);
+void flushFirestoreBuffer();
 
 static String escapeJson(const String& s) {
   // Escape básico para evitar quebrar JSON
@@ -167,6 +205,9 @@ void setup() {
   digitalWrite(LED_ALTO_PIN,  LOW);
 
   // Wi-Fi
+  WiFi.mode(WIFI_STA);
+  WiFi.setAutoReconnect(true);
+  WiFi.persistent(false);
   WiFi.begin(ssid, password);
   Serial.print("Conectando ao WiFi...");
   while (WiFi.status() != WL_CONNECTED) {
@@ -202,6 +243,7 @@ void setup() {
 // ===================== LOOP =====================
 void loop() {
   mqttClient.loop();
+  flushFirestoreBuffer();
 
   // Sensores -> sempre válidos: envia e atualiza automático em eventos
   verificarSensor(SENSOR_ALTO_PIN,  lastStateAlto,  "alto");
@@ -548,32 +590,23 @@ bool desligarBomba() {
 
 // ===================== FIRESTORE =====================
 void enviarDadosFirestore(const char* sensor, const String& estado) {
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("Erro: WiFi não conectado (sensores).");
-    return;
-  }
-
-  HTTPClient http;
+  String createdAt = getISOTimeUTC();
+  String eventId = String("sensores/") + gerarCommandId(String("sensor-") + sensor);
   String url = String(FIREBASE_SENSORES_URL) + "?key=" + FIREBASE_API_KEY;
 
   String jsonPayload =
     "{ \"fields\": { "
       "\"sensor\": { \"stringValue\": \"" + escapeJson(String(sensor)) + "\" }, "
       "\"estado\": { \"stringValue\": \"" + escapeJson(estado) + "\" }, "
-      "\"timestamp\": { \"timestampValue\": \"" + getISOTimeUTC() + "\" } "
+      "\"event_id\": { \"stringValue\": \"" + escapeJson(eventId) + "\" }, "
+      "\"device_id\": { \"stringValue\": \"" + escapeJson(String(DEVICE_ID)) + "\" }, "
+      "\"source\": { \"stringValue\": \"firmware\" }, "
+      "\"timestamp\": { \"timestampValue\": \"" + createdAt + "\" }, "
+      "\"created_at_device\": { \"timestampValue\": \"" + createdAt + "\" }, "
+      "\"sent_at\": { \"timestampValue\": \"" + getISOTimeUTC() + "\" } "
     "} }";
 
-  http.begin(url);
-  http.addHeader("Content-Type", "application/json");
-  int httpResponseCode = http.POST(jsonPayload);
-
-  if (httpResponseCode > 0) {
-    Serial.printf("Sensor enviado (Firestore). HTTP: %d\n", httpResponseCode);
-  } else {
-    Serial.printf("Erro Firestore (sensores): %s\n",
-                  http.errorToString(httpResponseCode).c_str());
-  }
-  http.end();
+  enviarOuEnfileirarFirestore("sensores", url, jsonPayload, eventId);
 }
 
 void enviarComandoFirestore(const String& mensagem, const String& acionamento) {
@@ -606,12 +639,9 @@ void enviarComandoFirestoreDetalhado(
   const String& commandId,
   const String& reason
 ) {
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("Erro: WiFi não conectado (comandos).");
-    return;
-  }
-
-  HTTPClient http;
+  String effectiveCommandId = commandId.length() > 0 ? commandId : gerarCommandId("command");
+  String createdAt = getISOTimeUTC();
+  String eventId = String("comandos/") + effectiveCommandId;
   String url = String(FIREBASE_COMANDOS_URL) + "?key=" + FIREBASE_API_KEY;
 
   String jsonPayload =
@@ -619,7 +649,9 @@ void enviarComandoFirestoreDetalhado(
       "\"bomba\": { \"stringValue\": \"" + escapeJson(mensagem) + "\" }, "
       "\"acionamento\": { \"stringValue\": \"" + escapeJson(acionamento) + "\" }, "
       "\"source\": { \"stringValue\": \"" + escapeJson(acionamento) + "\" }, "
-      "\"command_id\": { \"stringValue\": \"" + escapeJson(commandId) + "\" }, "
+      "\"command_id\": { \"stringValue\": \"" + escapeJson(effectiveCommandId) + "\" }, "
+      "\"event_id\": { \"stringValue\": \"" + escapeJson(eventId) + "\" }, "
+      "\"device_id\": { \"stringValue\": \"" + escapeJson(String(DEVICE_ID)) + "\" }, "
       "\"requested_state\": { \"booleanValue\": " + String(requestedState ? "true" : "false") + " }, "
       "\"applied_state\": { \"booleanValue\": " + String(appliedState ? "true" : "false") + " }, "
       "\"applied\": { \"booleanValue\": " + String(applied ? "true" : "false") + " }, "
@@ -628,20 +660,119 @@ void enviarComandoFirestoreDetalhado(
       "\"priority\": { \"stringValue\": \"" + escapeJson(priority) + "\" }, "
       "\"overridden_by\": { \"stringValue\": \"" + escapeJson(overriddenBy) + "\" }, "
       "\"reason\": { \"stringValue\": \"" + escapeJson(reason) + "\" }, "
-      "\"timestamp\": { \"timestampValue\": \"" + getISOTimeUTC() + "\" } "
+      "\"timestamp\": { \"timestampValue\": \"" + createdAt + "\" }, "
+      "\"created_at_device\": { \"timestampValue\": \"" + createdAt + "\" }, "
+      "\"sent_at\": { \"timestampValue\": \"" + getISOTimeUTC() + "\" } "
     "} }";
 
+  enviarOuEnfileirarFirestore("comandos", url, jsonPayload, eventId);
+}
+
+bool postarFirestore(const String& url, const String& jsonPayload, const String& label) {
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.print("Firestore adiado: WiFi não conectado (");
+    Serial.print(label);
+    Serial.println(").");
+    return false;
+  }
+
+  HTTPClient http;
   http.begin(url);
   http.addHeader("Content-Type", "application/json");
   int httpResponseCode = http.POST(jsonPayload);
+  bool success = httpResponseCode >= 200 && httpResponseCode < 300;
 
-  if (httpResponseCode > 0) {
-    Serial.printf("Comando enviado (Firestore). HTTP: %d\n", httpResponseCode);
+  if (success) {
+    Serial.print("Firestore enviado (");
+    Serial.print(label);
+    Serial.print("). HTTP: ");
+    Serial.println(httpResponseCode);
+  } else if (httpResponseCode > 0) {
+    Serial.print("Erro Firestore (");
+    Serial.print(label);
+    Serial.print("). HTTP: ");
+    Serial.println(httpResponseCode);
   } else {
-    Serial.printf("Erro Firestore (comandos): %s\n",
-                  http.errorToString(httpResponseCode).c_str());
+    Serial.print("Erro Firestore (");
+    Serial.print(label);
+    Serial.print("): ");
+    Serial.println(http.errorToString(httpResponseCode));
   }
   http.end();
+  return success;
+}
+
+void enviarOuEnfileirarFirestore(
+  const String& label,
+  const String& url,
+  const String& jsonPayload,
+  const String& eventId
+) {
+  if (postarFirestore(url, jsonPayload, label)) {
+    return;
+  }
+  enfileirarFirestore(label, url, jsonPayload, eventId);
+}
+
+void enfileirarFirestore(
+  const String& label,
+  const String& url,
+  const String& jsonPayload,
+  const String& eventId
+) {
+  if (firestoreBufferCount >= OFFLINE_BUFFER_CAPACITY) {
+    Serial.print("Buffer Firestore cheio; descartando evento antigo: ");
+    Serial.println(firestoreBuffer[firestoreBufferHead].eventId);
+    firestoreBuffer[firestoreBufferHead] = PendingFirestoreWrite();
+    firestoreBufferHead = (firestoreBufferHead + 1) % OFFLINE_BUFFER_CAPACITY;
+    firestoreBufferCount--;
+  }
+
+  size_t index = (firestoreBufferHead + firestoreBufferCount) % OFFLINE_BUFFER_CAPACITY;
+  firestoreBuffer[index].label = label;
+  firestoreBuffer[index].url = url;
+  firestoreBuffer[index].payload = jsonPayload;
+  firestoreBuffer[index].eventId = eventId;
+  firestoreBuffer[index].attempts = 0;
+  firestoreBufferCount++;
+
+  Serial.print("Evento Firestore enfileirado: ");
+  Serial.print(eventId);
+  Serial.print(" | pendentes=");
+  Serial.println(firestoreBufferCount);
+}
+
+void flushFirestoreBuffer() {
+  if (firestoreBufferCount == 0 || WiFi.status() != WL_CONNECTED) {
+    return;
+  }
+
+  unsigned long nowMs = millis();
+  if (nowMs - lastFirestoreFlushAttempt < FIRESTORE_RETRY_INTERVAL_MS) {
+    return;
+  }
+  lastFirestoreFlushAttempt = nowMs;
+
+  while (firestoreBufferCount > 0 && WiFi.status() == WL_CONNECTED) {
+    PendingFirestoreWrite& item = firestoreBuffer[firestoreBufferHead];
+    item.attempts++;
+
+    Serial.print("Reenviando evento Firestore: ");
+    Serial.print(item.eventId);
+    Serial.print(" | tentativa=");
+    Serial.println(item.attempts);
+
+    if (!postarFirestore(item.url, item.payload, item.label)) {
+      Serial.println("Flush Firestore pausado; nova tentativa no proximo ciclo.");
+      return;
+    }
+
+    item = PendingFirestoreWrite();
+    firestoreBufferHead = (firestoreBufferHead + 1) % OFFLINE_BUFFER_CAPACITY;
+    firestoreBufferCount--;
+    Serial.print("Evento Firestore confirmado; pendentes=");
+    Serial.println(firestoreBufferCount);
+  }
 }
 
 void publicarEstadoBomba(

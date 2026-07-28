@@ -558,7 +558,7 @@ Motivo: o app ja exibe os alertas persistidos. O proximo passo mais seguro e est
 - Pendencias relacionadas: Firebase, MQTT, Wi-Fi, backend URL, secrets de Functions, backend, frontend e firmware.
 - Objetivo: separar configuracao publica de segredo e documentar ambientes.
 - Contexto encontrado no codigo: Firebase Web config, chave API e URLs em frontend/firmware; backend usa env; MQTT hardcoded.
-- Situacao atual: parcialmente implementado no backend, hardcoded no frontend/firmware.
+- Situacao atual: implementada localmente, aguardando validacao em ambiente real.
 - Proposta de solucao: criar `.env.example` para frontend/functions, validar env no bootstrap, documentar que `VITE_*` e publico, mover secrets reais para Secret Manager/backend env/firmware strategy.
 - Backend afetado: `.env.example`, validacao de settings.
 - Frontend afetado: `firestoreConfig.ts`, `mqttService.ts`, `aiService.ts`.
@@ -571,7 +571,8 @@ Motivo: o app ja exibe os alertas persistidos. O proximo passo mais seguro e est
 - Criterios de aceite: nenhum valor sensivel novo versionado; `.env.example` completo; app falha com mensagem clara se env obrigatoria faltar.
 - Plano de testes: iniciar frontend/backend com env example adaptado; verificar bundle sem segredos administrativos; revisar `.gitignore`.
 - Arquivos provavelmente afetados: `.gitignore`, `backend/.env.example`, `frontend/.env.example`, `functions/.env.example`, `frontend/src/services/firestoreConfig.ts`, `frontend/src/services/mqttService.ts`, `firmware/TCC.ino/TCC_Final/*`, `README.md`.
-- Status: PENDENTE.
+- Status: AGUARDANDO VALIDACAO.
+- Resultado da validacao local: criado `frontend/.env.example`, centralizado `VITE_AI_BASE_URL` em `env.ts`, movido Firebase Web config para `VITE_FIREBASE_*`, MQTT passou a aceitar URL, topicos, client prefix e credenciais via `VITE_MQTT_*`, `functions/.env.example` documenta segredo opcional/local, `.gitignore` ignora `frontend/.env*` real e `firmware/TCC.ino/TCC_Final/secrets.h`. Sem `frontend/.env`, a UI abre em modo degradado com Firebase desconectado e log claro das variaveis ausentes; com `.env` preenchido, usa dados reais. O firmware `TCC_Final.ino` passou a ler Wi-Fi, MQTT e Firebase de `secrets.h`; `secrets.h.example` foi adicionado sem valores reais. `npm run lint` passou com warnings preexistentes de Fast Refresh em componentes UI; `npm run build` passou.
 - Resultado da validacao do usuario: _a preencher_.
 
 ### ATV-014 - Implementar buffer offline limitado no ESP32
@@ -581,7 +582,7 @@ Motivo: o app ja exibe os alertas persistidos. O proximo passo mais seguro e est
 - Pendencias relacionadas: perda de eventos, reconexao, deduplicacao, IDs unicos.
 - Objetivo: evitar perda de eventos quando Wi-Fi/Firestore estiver indisponivel, sem crescimento ilimitado.
 - Contexto encontrado no codigo: `enviarDadosFirestore` e `enviarComandoFirestore` retornam se Wi-Fi estiver desconectado.
-- Situacao atual: nao implementado.
+- Situacao atual: implementada localmente, aguardando teste em placa.
 - Proposta de solucao: fila circular estatica em RAM inicialmente, com capacidade definida apos estimativa de memoria; opcional NVS/LittleFS depois.
 - Backend afetado: deduplicacao por `event_id`.
 - Frontend afetado: nenhum direto.
@@ -590,11 +591,12 @@ Motivo: o app ja exibe os alertas persistidos. O proximo passo mais seguro e est
 - Contratos e payloads envolvidos: `event_id`, `device_id`, `created_at_device`, `sent_at`.
 - Dependencias: `ATV-002`, `ATV-007`.
 - Riscos: fragmentacao de heap se usar `String` em excesso; timestamps antes do NTP podem ser invalidos; buffer cheio exige politica clara.
-- Perguntas pendentes: prefere descartar evento mais antigo ou rejeitar evento novo quando o buffer encher?
+- Perguntas pendentes: validar em placa se a politica de descarte do evento mais antigo e adequada para a apresentacao.
 - Criterios de aceite: offline armazena ate N eventos; reconexao reenvia em ordem; limite nao e ultrapassado; logs indicam descarte.
 - Plano de testes: simular Wi-Fi offline, reconectar, atingir limite, reiniciar, timestamp sem NTP.
 - Arquivos provavelmente afetados: `firmware/TCC.ino/TCC_Final/TCC_Final.ino`, possivel `firmware/TCC.ino/TCC_Final/secrets.h.example`.
-- Status: PENDENTE.
+- Status: AGUARDANDO VALIDACAO.
+- Resultado da validacao local: `TCC_Final.ino` ganhou fila circular estatica `PendingFirestoreWrite` com capacidade `OFFLINE_BUFFER_CAPACITY`, retry por `FIRESTORE_RETRY_INTERVAL_MS`, envio em ordem no `loop()`, politica de descarte do evento mais antigo quando cheio e logs Serial para enfileiramento, reenvio, confirmacao e descarte. Eventos de `sensores` e `comandos` agora incluem `event_id`, `device_id`, `created_at_device` e `sent_at`, preservando timestamp original. Nao foi possivel compilar o sketch localmente porque `arduino-cli` nao esta disponivel no PATH e o `secrets.h` real deve ser criado localmente pelo desenvolvedor a partir do exemplo.
 - Resultado da validacao do usuario: _a preencher_.
 
 ### ATV-015 - Definir contrato MQTT e confirmacao real da bomba
@@ -711,7 +713,7 @@ Motivo: o app ja exibe os alertas persistidos. O proximo passo mais seguro e est
 - Pendencias relacionadas: Ollama fraco, Gemini, fallback, sessoes, provedor selecionavel.
 - Objetivo: desacoplar o chatbot de um unico provedor.
 - Contexto encontrado no codigo: `/llm/chat` usa `llm.py` com Ollama/OpenAI; `/agent` usa `ChatOllama` diretamente.
-- Situacao atual: parcialmente implementado.
+- Situacao atual: implementada localmente, aguardando validacao visual.
 - Proposta de solucao: criar interface comum para `OllamaProvider`, `OpenAIProvider` existente e futuro `GeminiProvider`; fazer agente analitico usar essa camada ou separar classificador deterministico/LLM.
 - Backend afetado: `llm.py`, `agent_langchain.py`, schemas de resposta.
 - Frontend afetado: `aiService`, ChatPage se exibir modelo/provedor.
@@ -724,7 +726,8 @@ Motivo: o app ja exibe os alertas persistidos. O proximo passo mais seguro e est
 - Criterios de aceite: provider selecionado por env; resposta identifica provider/model; indisponibilidade retorna erro claro.
 - Plano de testes: provider Ollama mock, provider indisponivel, `/llm/chat`, `/agent`, sessoes.
 - Arquivos provavelmente afetados: `backend/app/services/llm.py`, `backend/app/services/agent_langchain.py`, `backend/app/schemas/dto.py`, `frontend/src/services/aiService.ts`.
-- Status: PENDENTE.
+- Status: AGUARDANDO VALIDACAO.
+- Resultado da validacao local: `ChatPage` foi redesenhada com layout de altura/scroll proprio, perguntas rapidas em grid responsivo com cores clicaveis distintas do painel, bolhas de conversa, erro visual e composer com contraste/foco. `PumpControl` e atalhos da Home receberam classes visuais proprias para diferenciar campos acionaveis. `QuickStats` deixou de usar consumo diario fixo e passa a buscar media real de consumo em `/reports/summary?period=7d`; `useWaterSystem` estima o nivel visual a partir do ultimo evento real de sensor. `npm run lint` passou com warnings preexistentes de Fast Refresh em componentes UI; `npm run build` passou.
 - Resultado da validacao do usuario: _a preencher_.
 
 ### ATV-020 - Integrar Gemini via Google AI Studio

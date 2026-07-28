@@ -1,17 +1,39 @@
 import { initializeApp } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
+import { getFirestore, type Firestore } from "firebase/firestore";
+import { requiredEnv } from "./env";
 
-
-const firebaseConfig = {
-  apiKey: "AIzaSyD-3x3bJH3r2n0hyngOOC7_WOuvPBHo_T4",
-  authDomain: "tcc1-155fa.firebaseapp.com",
-  databaseURL: "https://tcc1-155fa-default-rtdb.firebaseio.com",
-  projectId: "tcc1-155fa",
-  storageBucket: "tcc1-155fa.firebasestorage.app",
-  messagingSenderId: "42021048757",
-  appId: "1:42021048757:web:c13807fb87694e3b0709fc",
-  measurementId: "G-KGHNFS1LEX"
+type FirebaseClientConfig = {
+  apiKey: string;
+  authDomain: string;
+  databaseURL: string;
+  projectId: string;
+  storageBucket: string;
+  messagingSenderId: string;
+  appId: string;
+  measurementId: string;
 };
 
-const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app);
+export let firebaseConfigError: string | null = null;
+
+const firebaseConfig = buildFirebaseConfig();
+const app = firebaseConfig ? initializeApp(firebaseConfig) : null;
+export const db: Firestore | null = app ? getFirestore(app) : null;
+
+function buildFirebaseConfig(): FirebaseClientConfig | null {
+  try {
+    return {
+      apiKey: requiredEnv("VITE_FIREBASE_API_KEY"),
+      authDomain: requiredEnv("VITE_FIREBASE_AUTH_DOMAIN"),
+      databaseURL: requiredEnv("VITE_FIREBASE_DATABASE_URL"),
+      projectId: requiredEnv("VITE_FIREBASE_PROJECT_ID"),
+      storageBucket: requiredEnv("VITE_FIREBASE_STORAGE_BUCKET"),
+      messagingSenderId: requiredEnv("VITE_FIREBASE_MESSAGING_SENDER_ID"),
+      appId: requiredEnv("VITE_FIREBASE_APP_ID"),
+      measurementId: requiredEnv("VITE_FIREBASE_MEASUREMENT_ID"),
+    };
+  } catch (error) {
+    firebaseConfigError = error instanceof Error ? error.message : String(error);
+    console.error(firebaseConfigError);
+    return null;
+  }
+}

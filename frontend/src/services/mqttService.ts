@@ -1,4 +1,5 @@
 import mqtt from "mqtt";
+import { booleanEnv, optionalEnv } from "./env";
 
 export type PumpCommandDirection = "ligar" | "desligar";
 
@@ -21,23 +22,30 @@ export interface PumpStateMessage {
   timestamp?: string;
 }
 
+const MQTT_STATE_TOPIC = optionalEnv("VITE_MQTT_STATE_TOPIC", "bomba/estado");
+const MQTT_CONTROL_TOPIC = optionalEnv("VITE_MQTT_CONTROL_TOPIC", "bomba/controle");
+const MQTT_CONTROL_V2_TOPIC = optionalEnv("VITE_MQTT_CONTROL_V2_TOPIC", "bomba/controle/v2");
+const MQTT_CLIENT_PREFIX = optionalEnv("VITE_MQTT_CLIENT_PREFIX", "aquamonitor_web");
+const mqttUsername = optionalEnv("VITE_MQTT_USERNAME");
+const mqttPassword = optionalEnv("VITE_MQTT_PASSWORD");
+
 const options = {
   connectTimeout: 4000,
-  clientId: 'ionic_client_' + Math.random().toString(16).substr(2, 8),
-  username: '', 
-  password: '', 
+  clientId: `${MQTT_CLIENT_PREFIX}_${Math.random().toString(16).slice(2, 10)}`,
+  ...(mqttUsername ? { username: mqttUsername } : {}),
+  ...(mqttPassword ? { password: mqttPassword } : {}),
 };
-const connectUrl = 'wss://broker.hivemq.com:8884/mqtt';
+const connectUrl = optionalEnv("VITE_MQTT_URL", "wss://broker.hivemq.com:8884/mqtt");
 const client = mqtt.connect(connectUrl, options);
-const publishLegacyControl = import.meta.env.VITE_MQTT_PUBLISH_LEGACY_CONTROL === "1";
+const publishLegacyControl = booleanEnv("VITE_MQTT_PUBLISH_LEGACY_CONTROL");
 
 
 client.on("connect", () => {
   console.log("Conectado ao MQTT");
 
-  client.subscribe("bomba/estado", (err) => {
+  client.subscribe(MQTT_STATE_TOPIC, (err) => {
     if (!err) {
-      console.log("Assinou bomba/estado");
+      console.log(`Assinou ${MQTT_STATE_TOPIC}`);
     }
   });
 });
@@ -64,9 +72,9 @@ export const enviarComando = (
       source: "frontend",
       timestamp: new Date().toISOString(),
     });
-    client.publish("bomba/controle/v2", v2Payload);
+    client.publish(MQTT_CONTROL_V2_TOPIC, v2Payload);
     if (publishLegacyControl) {
-      client.publish("bomba/controle", legacyPayload);
+      client.publish(MQTT_CONTROL_TOPIC, legacyPayload);
     }
     console.log(`Publicado comando de bomba: ${commandId}`);
     return { commandId, desiredOn, published: true };

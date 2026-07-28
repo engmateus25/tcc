@@ -1,9 +1,19 @@
 import { useState, useRef, useEffect } from "react";
 import { useHistory } from "react-router-dom";
-import { ArrowLeft, Send, Trash2, Bot, User } from "lucide-react";
+import {
+  Activity,
+  AlertTriangle,
+  ArrowLeft,
+  Bot,
+  CalendarDays,
+  Loader2,
+  Send,
+  Sparkles,
+  TimerReset,
+  Trash2,
+  User,
+} from "lucide-react";
 import { Button } from "../components/ui/button";
-import { Card } from "../components/ui/card";
-import { Badge } from "../components/ui/badge";
 import { sendAgentQuestion } from "../services/aiService";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -12,7 +22,31 @@ interface Message {
   role: "user" | "assistant";
   content: string;
   timestamp: Date;
+  status?: "normal" | "error";
 }
+
+const quickQuestions = [
+  {
+    icon: Activity,
+    text: "Me dê um resumo dos eventos dos sensores nesta semana.",
+    tone: "cyan",
+  },
+  {
+    icon: AlertTriangle,
+    text: "Quantas vezes a caixa ficou vazia nos últimos 20 dias?",
+    tone: "amber",
+  },
+  {
+    icon: CalendarDays,
+    text: "Quantas vezes a caixa ficou cheia nesse mês?",
+    tone: "blue",
+  },
+  {
+    icon: TimerReset,
+    text: "Quanto tempo a caixa ficou vazia neste mês?",
+    tone: "green",
+  },
+];
 
 export function ChatPage() {
   const history = useHistory();
@@ -35,12 +69,9 @@ export function ChatPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isTyping]);
 
-  const quickQuestions = [
-    "Me dê um resumo dos eventos dos sensores nesta semana.",
-    "Quantas vezes a caixa ficou vazia nos últimos 20 dias?",
-    "Quantas vezes a caixa ficou cheia nesse mês?",
-    "Quanto tempo a caixa ficou vazia neste mês?",
-  ];
+  useEffect(() => {
+    autoGrow();
+  }, [inputValue]);
 
   function autoGrow() {
     const el = textareaRef.current;
@@ -54,18 +85,18 @@ export function ChatPage() {
   function handleComposerKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      handleSendMessage();
+      void handleSendMessage();
     }
   }
 
-  const handleSendMessage = async () => {
-    if (!inputValue.trim()) return;
+  const handleSendMessage = async (forcedQuestion?: string) => {
+    const question = (forcedQuestion ?? inputValue).trim();
+    if (!question || isTyping) return;
 
-    // 1) Adiciona mensagem do usuário ao histórico visual
     const userMessage: Message = {
       id: Date.now().toString(),
       role: "user",
-      content: inputValue,
+      content: question,
       timestamp: new Date(),
     };
 
@@ -74,11 +105,7 @@ export function ChatPage() {
     setIsTyping(true);
 
     try {
-      // 2) Chama o AGENTE no backend, passando apenas a pergunta
       const res = await sendAgentQuestion(userMessage.content);
-
-      // Se quiser debugar a intenção detectada:
-      // console.log("Intent detectada:", res.intent);
 
       const aiResponse: Message = {
         id: (Date.now() + 1).toString(),
@@ -96,6 +123,7 @@ export function ChatPage() {
         content:
           "Erro ao consultar o assistente. Verifique sua conexão ou tente novamente em instantes.",
         timestamp: new Date(),
+        status: "error",
       };
       setMessages((prev) => [...prev, aiResponse]);
     } finally {
@@ -104,7 +132,7 @@ export function ChatPage() {
   };
 
   const handleQuickQuestion = (question: string) => {
-    setInputValue(question);
+    void handleSendMessage(question);
   };
 
   const handleClearChat = () => {
@@ -122,180 +150,147 @@ export function ChatPage() {
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-180px)]">
-      {/* Header */}
-      <div className="flex items-center gap-3 mb-4 shrink-0">
+    <div className="chat-shell">
+      <header className="chat-header">
         <Button
           variant="ghost"
           size="icon"
           onClick={() => history.push("/home")}
-          className="shrink-0"
+          className="chat-icon-button"
+          title="Voltar"
         >
           <ArrowLeft className="w-5 h-5" />
         </Button>
-        <div className="flex-1">
-          <h2 className="text-xl text-slate-800">Assistente IA</h2>
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-            <p className="text-sm text-slate-500">
-              Online · conectado ao AquaMonitor
-            </p>
+        <div className="chat-title-block">
+          <div className="chat-title-row">
+            <div className="chat-title-icon">
+              <Sparkles className="w-4 h-4" />
+            </div>
+            <h2>Assistente IA</h2>
           </div>
+          <p>Online · conectado ao AquaMonitor</p>
         </div>
         <Button
           variant="ghost"
           size="icon"
           onClick={handleClearChat}
-          className="shrink-0"
+          className="chat-icon-button"
+          title="Limpar conversa"
         >
           <Trash2 className="w-4 h-4" />
         </Button>
-      </div>
+      </header>
 
-      {/* Perguntas Rápidas */}
       {messages.length <= 1 && (
-        <div className="mb-4 shrink-0">
-          <p className="text-sm text-slate-600 mb-2">Perguntas rápidas:</p>
-          <div className="flex flex-wrap gap-2">
-            {quickQuestions.map((question, index) => (
-              <Badge
-                key={index}
-                variant="outline"
-                className="cursor-pointer hover:bg-slate-100"
-                onClick={() => handleQuickQuestion(question)}
-              >
-                {question}
-              </Badge>
-            ))}
+        <section className="chat-quick-panel">
+          <div className="chat-quick-heading">
+            <Sparkles className="w-4 h-4" />
+            <span>Perguntas rápidas</span>
           </div>
-        </div>
+          <div className="chat-quick-grid">
+            {quickQuestions.map((question) => {
+              const Icon = question.icon;
+              return (
+                <button
+                  key={question.text}
+                  type="button"
+                  className={`chat-quick-button chat-quick-${question.tone}`}
+                  onClick={() => handleQuickQuestion(question.text)}
+                  disabled={isTyping}
+                >
+                  <span className="chat-quick-icon">
+                    <Icon className="w-4 h-4" />
+                  </span>
+                  <span>{question.text}</span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
       )}
 
-      {/* Área de Mensagens */}
-      <div className="flex-1 overflow-y-auto space-y-4 mb-4">
+      <section className="chat-messages" aria-live="polite">
         <AnimatePresence>
           {messages.map((message) => (
             <motion.div
               key={message.id}
-              initial={{ opacity: 0, y: 20 }}
+              initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 0.3 }}
-              className={`flex gap-3 ${
-                message.role === "user"
-                  ? "flex-row-reverse"
-                  : "flex-row"
+              transition={{ duration: 0.2 }}
+              className={`chat-message-row ${
+                message.role === "user" ? "chat-message-row-user" : ""
               }`}
             >
-              {/* Avatar */}
               <div
-                className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
-                  message.role === "user"
-                    ? "bg-blue-600"
-                    : "bg-gradient-to-br from-purple-600 to-purple-700"
+                className={`chat-avatar ${
+                  message.role === "user" ? "chat-avatar-user" : "chat-avatar-bot"
                 }`}
               >
                 {message.role === "user" ? (
-                  <User className="w-4 h-4 text-white" />
+                  <User className="w-4 h-4" />
                 ) : (
-                  <Bot className="w-4 h-4 text-white" />
+                  <Bot className="w-4 h-4" />
                 )}
               </div>
 
-              {/* Mensagem */}
-              <Card
-                className={`p-3 max-w-[80%] ${
-                  message.role === "user"
-                    ? "bg-blue-600 text-white border-blue-600"
-                    : "bg-white"
-                }`}
+              <div
+                className={`chat-bubble ${
+                  message.role === "user" ? "chat-bubble-user" : "chat-bubble-bot"
+                } ${message.status === "error" ? "chat-bubble-error" : ""}`}
               >
-                <p className="text-sm whitespace-pre-line">
-                  {message.content}
-                </p>
-                <p
-                  className={`text-xs mt-2 ${
-                    message.role === "user"
-                      ? "text-blue-100"
-                      : "text-slate-400"
-                  }`}
-                >
+                <p>{message.content}</p>
+                <time>
                   {message.timestamp.toLocaleTimeString("pt-BR", {
                     hour: "2-digit",
                     minute: "2-digit",
                   })}
-                </p>
-              </Card>
+                </time>
+              </div>
             </motion.div>
           ))}
         </AnimatePresence>
 
-        {/* Indicador de digitação */}
         {isTyping && (
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
-            className="flex gap-3"
+            className="chat-message-row"
           >
-            <div className="shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-purple-600 to-purple-700 flex items-center justify-center">
-              <Bot className="w-4 h-4 text-white" />
+            <div className="chat-avatar chat-avatar-bot">
+              <Bot className="w-4 h-4" />
             </div>
-            <Card className="p-3 bg-white">
-              <div className="flex gap-1">
-                <div
-                  className="w-2 h-2 bg-slate-400 rounded-full animate-bounce"
-                  style={{ animationDelay: "0ms" }}
-                />
-                <div
-                  className="w-2 h-2 bg-slate-400 rounded-full animate-bounce"
-                  style={{ animationDelay: "150ms" }}
-                />
-                <div
-                  className="w-2 h-2 bg-slate-400 rounded-full animate-bounce"
-                  style={{ animationDelay: "300ms" }}
-                />
-              </div>
-            </Card>
+            <div className="chat-typing">
+              <Loader2 className="w-4 h-4" />
+              <span>Analisando dados...</span>
+            </div>
           </motion.div>
         )}
 
         <div ref={messagesEndRef} />
-      </div>
+      </section>
 
-      {/* Input de Mensagem */}
-      <div className="shrink-0 flex gap-2 items-end">
-        <div className="flex-1">
-          <textarea
-            ref={textareaRef}
-            value={inputValue}
-            onChange={(e) => {
-              setInputValue(e.target.value);
-              autoGrow();
-            }}
-            onKeyDown={handleComposerKeyDown}
-            placeholder="Digite sua pergunta..."
-            rows={1}
-            className="
-              w-full
-              rounded-md border border-slate-300 bg-white
-              px-3 py-2 text-sm leading-5
-              focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
-              disabled:opacity-50
-              resize-none overflow-hidden
-            "
-            disabled={isTyping}
-            aria-label="Campo de mensagem"
-          />
-        </div>
+      <footer className="chat-composer">
+        <textarea
+          ref={textareaRef}
+          value={inputValue}
+          onChange={(e) => setInputValue(e.target.value)}
+          onKeyDown={handleComposerKeyDown}
+          placeholder="Digite sua pergunta..."
+          rows={1}
+          disabled={isTyping}
+          aria-label="Campo de mensagem"
+        />
 
         <Button
-          onClick={handleSendMessage}
+          onClick={() => void handleSendMessage()}
           disabled={!inputValue.trim() || isTyping}
-          className="shrink-0"
+          className="chat-send-button"
+          title="Enviar pergunta"
         >
           <Send className="w-4 h-4" />
         </Button>
-      </div>
+      </footer>
     </div>
   );
 }

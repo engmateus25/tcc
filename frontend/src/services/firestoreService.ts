@@ -3,7 +3,7 @@ import {
   limit, onSnapshot, Unsubscribe, Timestamp,
   type FirestoreError, type QueryConstraint,
 } from "firebase/firestore";
-import { db } from "./firestoreConfig";
+import { db, firebaseConfigError } from "./firestoreConfig";
 
 type FirestoreTimestampLike =
   | Timestamp
@@ -32,6 +32,10 @@ function readString(value: unknown): string {
 
 export const carregarUltimoEstado = async () => {
   try {
+    if (!db) {
+      logFirebaseConfigError();
+      return null;
+    }
     const sensoresRef = collection(db, "sensores");
     const q = query(sensoresRef, orderBy("timestamp", "desc"));
     const querySnapshot = await getDocs(q);
@@ -57,6 +61,10 @@ export const carregarUltimoEstado = async () => {
 
 export const buscarComFiltros = async (sensorFiltro: string, dataInicio: string, dataFim: string) => {
   try {
+    if (!db) {
+      logFirebaseConfigError();
+      return [];
+    }
     const sensoresRef = collection(db, "sensores");
     const filtros: QueryConstraint[] = [];
 
@@ -126,6 +134,12 @@ export function listenUltimoEstado(
   onChange: (ev: UltimoEvento | null) => void,
   onError?: (e: FirestoreError) => void
 ): Unsubscribe {
+  if (!db) {
+    logFirebaseConfigError();
+    onChange(null);
+    return () => undefined;
+  }
+
   const sensoresRef = collection(db, "sensores");
   const q = query(sensoresRef, orderBy("timestamp", "desc"), limit(1));
 
@@ -147,4 +161,10 @@ export function listenUltimoEstado(
     },
     (err) => onError?.(err)
   );
+}
+
+function logFirebaseConfigError() {
+  if (firebaseConfigError) {
+    console.error(firebaseConfigError);
+  }
 }
