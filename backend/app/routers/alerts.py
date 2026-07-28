@@ -1,9 +1,13 @@
-from fastapi import APIRouter, Query
-from app.schemas.dto import SensorEventIn
+import os
+from secrets import compare_digest
+
+from fastapi import APIRouter, Header, HTTPException, Query, status
+from app.schemas.dto import SensorEventIn, SensorEventProcessResponse
 from app.services.sensor_anomaly import detect_intelligent_alerts
 from app.services.sensor_realtime import process_new_sensor_event
 
 router = APIRouter()
+WEBHOOK_SECRET_HEADER = "X-AquaMonitor-Webhook-Secret"
 
 
 @router.get("/sensors")
@@ -17,10 +21,30 @@ def get_sensor_alerts(
     result = detect_intelligent_alerts(period=period)
     return result
 
-@router.post("/sensor-event")
-async def sensor_event_webhook(payload: SensorEventIn):
+def _validate_sensor_event_secret(secret_header: str | None) -> None:
+    expected_secret = (os.getenv("SENSOR_EVENT_WEBHOOK_SECRET") or "").strip()
+    if not expected_secret:
+        return
+    if not isinstance(secret_header, str):
+        secret_header = None
+    if not secret_header or not compare_digest(secret_header, expected_secret):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid sensor event webhook secret",
+        )
+
+
+@router.post("/sensor-event", response_model=SensorEventProcessResponse)
+async def sensor_event_webhook(
+    payload: SensorEventIn,
+    x_aquamonitor_webhook_secret: str | None = Header(
+        default=None,
+        alias=WEBHOOK_SECRET_HEADER,
+    ),
+):
     """
     Endpoint chamado pela Cloud Function SEMPRE que um doc novo for criado em 'sensores'.
     """
+    _validate_sensor_event_secret(x_aquamonitor_webhook_secret)
     result = process_new_sensor_event(payload.model_dump())
     return result

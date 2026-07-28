@@ -6,6 +6,11 @@ import numpy as np
 from firebase_admin import firestore
 from .autocloud_core import AutoCloud
 from .firestore import _init_firebase_admin_once
+from .sensor_event_processing import (
+    mark_sensor_event_failed,
+    mark_sensor_event_processed,
+    reserve_sensor_event_processing,
+)
 
 
 ALERTS_COLLECTION = os.getenv("FIRESTORE_ALERTS_COLLECTION", "alerts")
@@ -104,10 +109,11 @@ class SensorRealtimeEngine:
 
     # ---------- SALVAR ALERTA NO FIRESTORE ----------
 
-    def _save_alert(self, alert: Dict[str, Any]) -> None:
+    def _save_alert(self, alert: Dict[str, Any]) -> str:
         _init_firebase_admin_once()
         db = firestore.client()
-        db.collection(ALERTS_COLLECTION).add(alert)
+        _, ref = db.collection(ALERTS_COLLECTION).add(alert)
+        return ref.id
 
     # ---------- PROCESSAR EVENTO ÚNICO (CHAMADO PELO WEBHOOK) ----------
 
@@ -145,15 +151,19 @@ class SensorRealtimeEngine:
             rule_alert = self._check_rule_based(event)
 
         # fora do lock, grava os alerts (se existirem)
+        alerts_created = []
         if rule_alert is not None:
-            self._save_alert(rule_alert)
+            alert_id = self._save_alert(rule_alert)
+            alerts_created.append({"id": alert_id, "tipo": rule_alert.get("tipo")})
         if autocloud_alert is not None:
-            self._save_alert(autocloud_alert)
+            alert_id = self._save_alert(autocloud_alert)
+            alerts_created.append({"id": alert_id, "tipo": autocloud_alert.get("tipo")})
 
         return {
             "class_index": class_idx,
             "rule_alert": rule_alert,
             "autocloud_alert": autocloud_alert,
+            "alerts_created": alerts_created,
         }
 
 
@@ -163,6 +173,52 @@ _engine = SensorRealtimeEngine(m=2.5)
 
 def process_new_sensor_event(event: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Função simples que o router vai chamar.
+    Processa um evento de sensor com idempotência persistida no Firestore.
     """
-    return _engine.process_event(event)
+    reservation = reserve_sensor_event_processing(event)
+
+    if reservation.duplicate:
+        return {
+            "processed": False,
+            "duplicate": True,
+            "event_id": reservation.event_id,
+            "processing_key": reservation.processing_key,
+            "processing_status": reservation.existing_status,
+            "payload_hash_mismatch": reservation.payload_hash_mismatch,
+            "alerts_created": [],
+            "cycle_created": None,
+            "autocloud": {
+                "used": False,
+                "reason": "duplicate_event",
+            },
+        }
+
+    event_with_identity = {
+        **event,
+        "event_id": reservation.event_id,
+        "processing_key": reservation.processing_key,
+    }
+
+    try:
+        engine_result = _engine.process_event(event_with_identity)
+        autocloud_alert = engine_result.get("autocloud_alert")
+        result = {
+            "processed": True,
+            "duplicate": False,
+            "event_id": reservation.event_id,
+            "processing_key": reservation.processing_key,
+            "processing_status": "processed",
+            "payload_hash_mismatch": False,
+            "alerts_created": engine_result.get("alerts_created") or [],
+            "cycle_created": None,
+            "autocloud": {
+                "used": True,
+                "class_index": engine_result.get("class_index"),
+                "alert_created": autocloud_alert is not None,
+            },
+        }
+        mark_sensor_event_processed(reservation, result)
+        return result
+    except Exception as exc:
+        mark_sensor_event_failed(reservation, exc)
+        raise

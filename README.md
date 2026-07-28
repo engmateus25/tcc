@@ -113,6 +113,8 @@ GOOGLE_APPLICATION_CREDENTIALS
 FIREBASE_CREDENTIALS_JSON
 FIRESTORE_SENSORS_COLLECTION
 FIRESTORE_ALERTS_COLLECTION
+FIRESTORE_SENSOR_EVENT_PROCESSING_COLLECTION
+SENSOR_EVENT_WEBHOOK_SECRET
 LLM_PROVIDER
 OLLAMA_BASE_URL
 OLLAMA_MODEL
@@ -211,10 +213,29 @@ Uso atual:
 - Firestore `sensores`: eventos dos sensores com `sensor`, `estado` e `timestamp`.
 - Firestore `comandos`: comandos/acionamentos da bomba.
 - Firestore `chat_sessions`: sessoes e mensagens do chat no backend.
+- Firestore `sensor_event_processing`: controle tecnico de processamento idempotente por evento.
 - MQTT `bomba/controle`: comandos enviados pelo app.
 - MQTT `bomba/estado`: status lido pelo app quando publicado.
 
-Ha tambem um rascunho server-side de Cloud Function em `functions/src/index.js` para disparar o webhook `/alerts/sensor-event` quando um documento novo entra em `sensores`. Essa pasta ainda nao esta pronta para deploy; a configuracao completa de Firebase Functions, secrets, autenticacao e idempotencia sera definida nas proximas atividades.
+O webhook `POST /alerts/sensor-event` aceita o payload legado do firmware e o payload enriquecido da Function:
+
+```json
+{
+  "document_id": "firestore-doc-id",
+  "event_id": "sensores/firestore-doc-id",
+  "sensor": "baixo",
+  "estado": "desceu",
+  "timestamp": "2026-07-27T12:00:00Z",
+  "device_id": "esp32-reservatorio-01",
+  "source": "firestore_on_create",
+  "raw_path": "sensores/firestore-doc-id",
+  "received_at": "2026-07-27T12:00:01Z"
+}
+```
+
+Quando `SENSOR_EVENT_WEBHOOK_SECRET` estiver definido no backend, a chamada deve enviar o header `X-AquaMonitor-Webhook-Secret`. O backend usa `event_id`, `raw_path` ou `document_id` como chave idempotente e registra o processamento em `sensor_event_processing`.
+
+Ha tambem um rascunho server-side de Cloud Function em `functions/src/index.js` para disparar esse webhook quando um documento novo entra em `sensores`. Essa pasta ainda nao esta pronta para deploy; a configuracao completa de Firebase Functions, emulator e secrets sera definida nas proximas atividades.
 
 ## Cuidados de seguranca
 

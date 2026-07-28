@@ -1,6 +1,6 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import List, Literal, Optional, Any
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 # ===== Chat =====
@@ -68,17 +68,61 @@ class AgentResponse(BaseModel):
     intent: AquaIntent
 
 
-# ==== Alerts ====
-class SensorEventIn(BaseModel):
-    sensor: str           # "baixo" ou "alto"
-    estado: str           # "subiu" ou "desceu"
-    timestamp: datetime   # ISO8601 vindo do Cloud Function
-    device_id: Optional[str] = None
+# ==== Alerts / Cloud Function ====
+def utc_now() -> datetime:
+    return datetime.now(timezone.utc)
 
 
-# ==== Cloud Function====
 class SensorEventIn(BaseModel):
-    sensor: str           # "baixo" ou "alto"
-    estado: str           # "subiu" ou "desceu"
-    timestamp: datetime   # ISO8601 vindo do Cloud Function
+    sensor: Literal["baixo", "alto"]
+    estado: Literal["subiu", "desceu"]
+    timestamp: datetime = Field(default_factory=utc_now)
     device_id: Optional[str] = None
+    document_id: Optional[str] = None
+    event_id: Optional[str] = None
+    source: Optional[str] = "unknown"
+    raw_path: Optional[str] = None
+    received_at: Optional[datetime] = None
+
+    @field_validator("sensor", "estado", mode="before")
+    @classmethod
+    def normalize_required_text(cls, value: Any) -> Any:
+        if isinstance(value, str):
+            return value.strip().lower()
+        return value
+
+    @field_validator("device_id", "document_id", "event_id", "source", "raw_path", mode="before")
+    @classmethod
+    def normalize_optional_text(cls, value: Any) -> Optional[str]:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            normalized = value.strip()
+            return normalized or None
+        return str(value)
+
+    @field_validator("timestamp", mode="before")
+    @classmethod
+    def default_missing_timestamp(cls, value: Any) -> Any:
+        return value or utc_now()
+
+    @field_validator("timestamp", "received_at")
+    @classmethod
+    def normalize_datetime(cls, value: Optional[datetime]) -> Optional[datetime]:
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
+
+
+class SensorEventProcessResponse(BaseModel):
+    processed: bool
+    duplicate: bool
+    event_id: str
+    processing_key: Optional[str] = None
+    processing_status: Optional[str] = None
+    payload_hash_mismatch: Optional[bool] = None
+    alerts_created: List[dict] = Field(default_factory=list)
+    cycle_created: Optional[Any] = None
+    autocloud: dict = Field(default_factory=dict)

@@ -232,9 +232,9 @@ Motivo: antes de implementar Functions e alertas, o projeto precisa ao menos sep
 - Criterios de aceite: `npm exec tsc -- --noEmit` sem erros de camada; backend importavel em ambiente documentado; Cypress inicial alinhado a uma tela real ou marcado como pendente.
 - Plano de testes: `npm exec tsc -- --noEmit`; `npm run lint`; import do backend com ambiente correto sem escrever bytecode.
 - Arquivos provavelmente afetados: `frontend/src/services/alerts.ts`, `frontend/src/hooks/useWaterSystem.ts`, `frontend/src/components/ui/*`, `frontend/cypress/e2e/test.cy.ts`, `README.md`, `backend/.env.example`.
-- Status: AGUARDANDO VALIDACAO.
+- Status: CONCLUIDO.
 - Resultado da validacao local: backend importavel e compilavel; `tsc`, `lint`, `build` e Cypress inicial passaram no Linux. Permanecem apenas avisos nao bloqueantes de fast refresh em componentes `ui`, bundle grande e bases Browserslist/Baseline desatualizadas.
-- Resultado da validacao do usuario: _a preencher_.
+- Resultado da validacao do usuario: validado pelo usuario e commitado antes do inicio de `ATV-002`, `ATV-004` e `ATV-007`.
 
 ### ATV-002 - Definir contrato de evento de sensor e IDs
 
@@ -243,7 +243,7 @@ Motivo: antes de implementar Functions e alertas, o projeto precisa ao menos sep
 - Pendencias relacionadas: Firebase Functions, endpoint `/alerts/sensor-event`, idempotencia, buffer offline, AutoCloud, alertas.
 - Objetivo: estabelecer o payload canonico de evento do sensor entre ESP32, Firestore, Function e backend.
 - Contexto encontrado no codigo: firmware grava `sensor`, `estado`, `timestamp`; schema backend espera esses campos e `device_id` opcional; Function atual nao envia `document_id`.
-- Situacao atual: contrato minimo existe, mas insuficiente para idempotencia e rastreabilidade.
+- Situacao atual: implementada localmente com payload legado e enriquecido aceitos pelo backend.
 - Proposta de solucao: definir payload com `document_id`, `sensor`, `estado`, `timestamp`, `device_id`, `received_at`, `source`, `event_id` opcional, `raw_path` e metadados de Function.
 - Backend afetado: schemas e servico de processamento.
 - Frontend afetado: tipos de historico e exibicao de alertas no futuro.
@@ -263,13 +263,14 @@ Motivo: antes de implementar Functions e alertas, o projeto precisa ao menos sep
 }
 ```
 
-- Dependencias: confirmacao do nome do dispositivo e se o firmware pode gerar `event_id`.
+- Dependencias: confirmacao futura do nome oficial do dispositivo e se o firmware passara a gerar `event_id`.
 - Riscos: mudar payload sem compatibilidade pode quebrar eventos existentes.
 - Perguntas pendentes: qual deve ser o identificador oficial do ESP32? Podemos tratar `doc.id` como idempotency key inicial mesmo antes de firmware enviar `event_id`?
 - Criterios de aceite: contrato documentado; backend aceita payload atual e payload enriquecido; campos obrigatorios e opcionais definidos.
 - Plano de testes: validar evento baixo, alto, sem `device_id`, sem `timestamp`, `timestamp` string/Firestore convertido.
 - Arquivos provavelmente afetados: `specs/*`, `backend/app/schemas/dto.py`, `backend/app/services/sensor_realtime.py`, `firmware/TCC.ino/TCC_Final/TCC_Final.ino`, `README.md`.
-- Status: PRONTO PARA IMPLEMENTACAO.
+- Status: AGUARDANDO VALIDACAO.
+- Resultado da validacao local: schema consolidado em `SensorEventIn`, com `document_id`, `event_id`, `source`, `raw_path`, `received_at`, normalizacao de `sensor/estado`, timestamp padrao quando ausente e compatibilidade com payload legado. Testes `unittest` cobrem payload legado e identidade por `raw_path`/`document_id`.
 - Resultado da validacao do usuario: _a preencher_.
 
 ### ATV-003 - Criar harness pytest para backend
@@ -302,7 +303,7 @@ Motivo: antes de implementar Functions e alertas, o projeto precisa ao menos sep
 - Pendencias relacionadas: Firebase Functions, chamada autenticada ao backend, validacao logica, processamento AutoCloud, alertas.
 - Objetivo: transformar o endpoint existente em uma porta robusta para eventos criados no Firestore.
 - Contexto encontrado no codigo: endpoint existe em `alerts.py`, mas sem autenticacao, sem idempotencia, sem doc id e com schema duplicado.
-- Situacao atual: parcialmente implementado.
+- Situacao atual: implementada localmente com autenticacao configuravel por header.
 - Proposta de solucao: consolidar schema, incluir `document_id`, validar `sensor/estado`, normalizar timestamp, exigir segredo/header ou assinatura configuravel, retornar `processed`, `duplicate`, `alerts_created`, `cycle_created`.
 - Backend afetado: router, schema, service.
 - Frontend afetado: nenhum direto.
@@ -329,7 +330,8 @@ Motivo: antes de implementar Functions e alertas, o projeto precisa ao menos sep
 - Criterios de aceite: endpoint rejeita payload invalido e chamada sem autenticacao; aceita evento valido; resposta e rastreavel.
 - Plano de testes: TestClient com payload valido, invalido, sem header, header incorreto, duplicado.
 - Arquivos provavelmente afetados: `backend/app/routers/alerts.py`, `backend/app/routers/webhook_sensor.py`, `backend/app/schemas/dto.py`, `backend/app/services/sensor_realtime.py`, `backend/.env.example`.
-- Status: PENDENTE.
+- Status: AGUARDANDO VALIDACAO.
+- Resultado da validacao local: endpoint exige `X-AquaMonitor-Webhook-Secret` quando `SENSOR_EVENT_WEBHOOK_SECRET` esta configurado, rejeita segredo ausente/incorreto, aceita payload valido e retorna `processed`, `duplicate`, `event_id`, `alerts_created`, `cycle_created` e `autocloud`. O rascunho em `functions/src/index.js` envia o payload enriquecido e o header quando configurado.
 - Resultado da validacao do usuario: _a preencher_.
 
 ### ATV-005 - Criar estrutura server-side `functions/`
@@ -339,7 +341,7 @@ Motivo: antes de implementar Functions e alertas, o projeto precisa ao menos sep
 - Pendencias relacionadas: Firebase Functions, `frontend/src/services/alerts.ts`, secrets, emulador, ambientes.
 - Objetivo: mover a responsabilidade server-side para uma pasta propria e fora do bundle frontend.
 - Contexto encontrado no codigo: nao ha `functions/`, `firebase.json`, `.firebaserc`; codigo de Function esta no frontend.
-- Situacao atual: nao implementado.
+- Situacao atual: implementada localmente com reserva atomica em Firestore.
 - Proposta de solucao: criar `functions/` em TypeScript, com `package.json`, `src/index.ts`, `tsconfig.json`, `.env.example` sem secrets, scripts de build/test e `firebase.json`.
 - Backend afetado: apenas URL/contrato consumido.
 - Frontend afetado: remocao/reorganizacao de `frontend/src/services/alerts.ts`.
@@ -352,7 +354,8 @@ Motivo: antes de implementar Functions e alertas, o projeto precisa ao menos sep
 - Criterios de aceite: `functions` compila localmente; frontend nao inclui codigo de Functions; scripts documentados.
 - Plano de testes: `npm --prefix functions run build`; teste unitario do conversor de payload; emulador planejado.
 - Arquivos provavelmente afetados: `functions/package.json`, `functions/src/index.ts`, `functions/tsconfig.json`, `firebase.json`, `.firebaserc`, `.gitignore`, `README.md`, `frontend/src/services/alerts.ts`.
-- Status: PENDENTE.
+- Status: AGUARDANDO VALIDACAO.
+- Resultado da validacao local: criada a colecao tecnica configuravel `sensor_event_processing`; o backend usa `DocumentReference.create()` como reserva atomica, grava status `processing`, `processed` ou `failed`, registra hash do payload e retorna `duplicate: true` sem reprocessar quando a chave ja existe. Teste unitario cobre que evento duplicado nao chama o motor de processamento.
 - Resultado da validacao do usuario: _a preencher_.
 
 ### ATV-006 - Implementar trigger Firestore `onDocumentCreated`
