@@ -130,7 +130,7 @@ pytest
 python -m compileall app tests
 ```
 
-Os testes atuais cobrem contrato de schema, autenticacao do webhook e idempotencia com mocks locais. Eles nao exigem credenciais reais do Firestore.
+Os testes atuais cobrem contrato de schema, autenticacao do webhook, idempotencia e falha operacional do Firestore com mocks locais. Eles nao exigem credenciais reais do Firestore.
 
 ### Variaveis de ambiente do backend
 
@@ -144,6 +144,7 @@ FIRESTORE_SENSORS_COLLECTION
 FIRESTORE_ALERTS_COLLECTION
 FIRESTORE_SENSOR_EVENT_PROCESSING_COLLECTION
 FIRESTORE_FILLING_CYCLES_COLLECTION
+FIRESTORE_OPERATION_TIMEOUT_SECONDS
 SENSOR_DUPLICATE_WINDOW_SECONDS
 SENSOR_OUT_OF_ORDER_TOLERANCE_SECONDS
 MIN_PLAUSIBLE_DRAIN_TIME_SECONDS
@@ -176,9 +177,11 @@ Pontos principais:
 - `frontend/src/pages/HistoryPage.tsx`: historico e estatisticas, ainda com dados mockados em parte.
 - `frontend/src/pages/ChatPage.tsx`: interface do assistente IA.
 - `frontend/src/hooks/useWaterSystem.ts`: estado central, Firestore realtime e MQTT.
+- `frontend/src/hooks/useAlerts.ts`: polling dos alertas persistidos no backend.
 - `frontend/src/services/firestoreService.ts`: consultas e listeners da colecao `sensores`.
 - `frontend/src/services/mqttService.ts`: conexao MQTT e publicacao em `bomba/controle`.
 - `frontend/src/services/aiService.ts`: chamadas ao backend.
+- `frontend/src/services/alerts.ts`: consulta e reconhecimento de alertas inteligentes.
 
 ### Rodar o frontend
 
@@ -272,6 +275,8 @@ O webhook `POST /alerts/sensor-event` aceita o payload legado do firmware e o pa
 ```
 
 Quando `SENSOR_EVENT_WEBHOOK_SECRET` estiver definido no backend, a chamada deve enviar o header `X-AquaMonitor-Webhook-Secret`. O backend usa `event_id`, `raw_path` ou `document_id` como chave idempotente e registra o processamento em `sensor_event_processing`.
+
+As colecoes tecnicas `sensor_event_processing`, `alerts` e `filling_cycles` sao criadas automaticamente pelo Firestore no primeiro documento gravado com credenciais Firebase Admin validas. Se a credencial estiver invalida ou indisponivel, as rotas de alertas retornam `503` em vez de aguardar o retry longo padrao do SDK.
 
 Depois da idempotencia, o backend aplica regras deterministicas antes de qualquer analise temporal. Eventos com alerta bloqueante, como duplicidade, timestamp ausente, fora de ordem, repeticao suspeita do sensor baixo ou esvaziamento rapido demais, nao alimentam ciclos nem a analise de tempo de enchimento.
 
@@ -400,7 +405,8 @@ Para firmware, validar no Arduino IDE ou ambiente equivalente com placa ESP32 e 
 
 - A tela de historico ainda possui dados mockados.
 - O frontend ja escuta Firestore para ultimo evento de sensor.
+- O frontend exibe alertas inteligentes persistidos pelo backend e permite reconhecer alertas abertos.
 - O controle da bomba usa MQTT diretamente do frontend.
 - O backend le Firestore para relatorios, alertas e agente IA.
-- O backend persiste alertas padronizados e ciclos de enchimento validos; a exibicao desses alertas no app ainda e pendencia de frontend.
+- O backend persiste alertas padronizados e ciclos de enchimento validos.
 - A Firebase Function de alertas esta estruturada em `functions/src/index.ts`, com build/test locais. Emulator e deploy ainda precisam de projeto Firebase, Firebase CLI e secrets configurados.

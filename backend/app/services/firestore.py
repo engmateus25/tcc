@@ -1,12 +1,55 @@
-import os
 import json
+import os
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Tuple
+
 import firebase_admin
 from firebase_admin import credentials, firestore
+from google.api_core.exceptions import (
+    DeadlineExceeded,
+    PermissionDenied,
+    RetryError,
+    ServiceUnavailable,
+    Unauthenticated,
+)
+from google.auth.exceptions import GoogleAuthError
+
+try:
+    import grpc
+except ImportError:  # pragma: no cover - grpc vem das dependencias do Firestore
+    grpc = None
 
 
 SENSORS_COLLECTION = os.getenv("FIRESTORE_SENSORS_COLLECTION", "sensores")
+DEFAULT_FIRESTORE_OPERATION_TIMEOUT_SECONDS = 10.0
+
+
+FIRESTORE_DEPENDENCY_ERROR_TYPES = (
+    DeadlineExceeded,
+    PermissionDenied,
+    RetryError,
+    ServiceUnavailable,
+    Unauthenticated,
+    GoogleAuthError,
+)
+
+
+def firestore_operation_timeout_seconds() -> float:
+    raw_value = (os.getenv("FIRESTORE_OPERATION_TIMEOUT_SECONDS") or "").strip()
+    if not raw_value:
+        return DEFAULT_FIRESTORE_OPERATION_TIMEOUT_SECONDS
+    try:
+        value = float(raw_value)
+    except ValueError:
+        return DEFAULT_FIRESTORE_OPERATION_TIMEOUT_SECONDS
+    return max(1.0, value)
+
+
+def is_firestore_dependency_error(exc: Exception) -> bool:
+    if isinstance(exc, FIRESTORE_DEPENDENCY_ERROR_TYPES):
+        return True
+    return grpc is not None and isinstance(exc, grpc.RpcError)
+
 
 def _init_firebase_admin_once():
     if firebase_admin._apps:
@@ -144,13 +187,13 @@ def fetch_sensor_events(period: str) -> List[Dict]:
 
     # Filtra por timestamp e ordena cronologicamente
     query = (
-        col.where("timestamp", ">=", start)
-           .where("timestamp", "<=", end)
+        col.where(filter=firestore.FieldFilter("timestamp", ">=", start))
+           .where(filter=firestore.FieldFilter("timestamp", "<=", end))
            .order_by("timestamp")
     )
 
     events: List[Dict] = []
-    for doc in query.stream():
+    for doc in query.stream(retry=None, timeout=firestore_operation_timeout_seconds()):
         data = doc.to_dict()
         raw_path = f"{SENSORS_COLLECTION}/{doc.id}"
         data.setdefault("document_id", doc.id)

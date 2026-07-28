@@ -4,6 +4,7 @@ from typing import Any, Dict, List
 from .alerts_store import save_alerts
 from .autocloud_fill_time import analyze_fill_time_cycle
 from .filling_cycles import FillingCycleTracker, save_filling_cycle
+from .firestore import is_firestore_dependency_error
 from .sensor_event_processing import (
     mark_sensor_event_failed,
     mark_sensor_event_processed,
@@ -127,7 +128,11 @@ def process_new_sensor_event(event: Dict[str, Any]) -> Dict[str, Any]:
         mark_sensor_event_processed(reservation, result)
         return result
     except Exception as exc:
-        mark_sensor_event_failed(reservation, exc)
+        if not is_firestore_dependency_error(exc):
+            try:
+                mark_sensor_event_failed(reservation, exc)
+            except Exception:
+                pass
         raise
 
 

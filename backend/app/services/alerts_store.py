@@ -6,7 +6,11 @@ from typing import Any, Dict, Iterable, List, Optional
 from firebase_admin import firestore
 from google.api_core.exceptions import Conflict
 
-from .firestore import _get_period_range, _init_firebase_admin_once
+from .firestore import (
+    _get_period_range,
+    _init_firebase_admin_once,
+    firestore_operation_timeout_seconds,
+)
 
 
 ALERTS_COLLECTION = os.getenv("FIRESTORE_ALERTS_COLLECTION", "alerts")
@@ -51,6 +55,7 @@ def save_alert(alert: Dict[str, Any]) -> Dict[str, Any]:
     _init_firebase_admin_once()
     db = firestore.client()
     ref = db.collection(ALERTS_COLLECTION).document(document["id"])
+    timeout = firestore_operation_timeout_seconds()
 
     try:
         ref.create(
@@ -58,10 +63,12 @@ def save_alert(alert: Dict[str, Any]) -> Dict[str, Any]:
                 **document,
                 "created_at": firestore.SERVER_TIMESTAMP,
                 "updated_at": firestore.SERVER_TIMESTAMP,
-            }
+            },
+            retry=None,
+            timeout=timeout,
         )
     except Conflict:
-        existing = ref.get().to_dict() or {}
+        existing = ref.get(retry=None, timeout=timeout).to_dict() or {}
         return _alert_summary(document, duplicate=True, status=existing.get("status"))
 
     return _alert_summary(document, duplicate=False)
@@ -81,23 +88,24 @@ def list_alerts(
     _init_firebase_admin_once()
     db = firestore.client()
     start, end = _get_period_range(period)
+    timeout = firestore_operation_timeout_seconds()
 
     query = (
         db.collection(ALERTS_COLLECTION)
-        .where("detected_at", ">=", start)
-        .where("detected_at", "<=", end)
+        .where(filter=firestore.FieldFilter("detected_at", ">=", start))
+        .where(filter=firestore.FieldFilter("detected_at", "<=", end))
     )
     if status:
-        query = query.where("status", "==", status)
+        query = query.where(filter=firestore.FieldFilter("status", "==", status))
     if severity:
-        query = query.where("severity", "==", severity)
+        query = query.where(filter=firestore.FieldFilter("severity", "==", severity))
 
     query = query.order_by("detected_at", direction=firestore.Query.DESCENDING).limit(
         max(1, min(limit, 500))
     )
 
     alerts: List[Dict[str, Any]] = []
-    for doc in query.stream():
+    for doc in query.stream(retry=None, timeout=timeout):
         data = doc.to_dict() or {}
         data["id"] = data.get("id") or doc.id
         alerts.append(data)
@@ -116,7 +124,9 @@ def acknowledge_alert(alert_id: str) -> Dict[str, Any]:
             "acknowledged_at": acknowledged_at,
             "status": "acknowledged",
             "updated_at": firestore.SERVER_TIMESTAMP,
-        }
+        },
+        retry=None,
+        timeout=firestore_operation_timeout_seconds(),
     )
     return {
         "id": alert_id,

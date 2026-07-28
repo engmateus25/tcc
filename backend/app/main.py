@@ -30,7 +30,7 @@ app.add_middleware(
 app.include_router(chat_router, prefix="/llm", tags=["llm"])
 app.include_router(reports_router, prefix="/reports", tags=["reports"])
 app.include_router(agent_router, tags=["agent"])
-app.include_router(alerts_router, tags=["alerts"])
+app.include_router(alerts_router, prefix="/alerts", tags=["alerts"])
 
 # Scheduler 
 start_scheduler_if_enabled(app)

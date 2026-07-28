@@ -8,7 +8,11 @@ from typing import Any, Dict, Optional
 from firebase_admin import firestore
 from google.api_core.exceptions import Conflict
 
-from .firestore import SENSORS_COLLECTION, _init_firebase_admin_once
+from .firestore import (
+    SENSORS_COLLECTION,
+    _init_firebase_admin_once,
+    firestore_operation_timeout_seconds,
+)
 
 
 PROCESSING_COLLECTION = os.getenv(
@@ -87,6 +91,7 @@ def reserve_sensor_event_processing(event: Dict[str, Any]) -> SensorEventReserva
     _init_firebase_admin_once()
     db = firestore.client()
     ref = db.collection(PROCESSING_COLLECTION).document(processing_key)
+    timeout = firestore_operation_timeout_seconds()
 
     processing_doc = {
         "event_id": event_id,
@@ -106,9 +111,9 @@ def reserve_sensor_event_processing(event: Dict[str, Any]) -> SensorEventReserva
     }
 
     try:
-        ref.create(processing_doc)
+        ref.create(processing_doc, retry=None, timeout=timeout)
     except Conflict:
-        existing = ref.get().to_dict() or {}
+        existing = ref.get(retry=None, timeout=timeout).to_dict() or {}
         existing_hash = existing.get("payload_hash")
         return SensorEventReservation(
             event_id=event_id,
@@ -164,7 +169,9 @@ def _update_processing_doc(processing_key: str, data: Dict[str, Any]) -> None:
         {
             **data,
             "updated_at": firestore.SERVER_TIMESTAMP,
-        }
+        },
+        retry=None,
+        timeout=firestore_operation_timeout_seconds(),
     )
 
 

@@ -5,9 +5,11 @@ import { PumpControl } from "../components/PumpControl";
 import { PumpModeDisplay } from "../components/PumpModeDisplay";
 import { EnergyEstimate } from "../components/EnergyEstimate";
 import { WaterLevelAlert } from "../components/WaterLevelAlert";
+import { IntelligentAlertsPanel } from "../components/IntelligentAlertsPanel";
 import { QuickStats } from "../components/QuickStats";
 import { BarChart3, MessageSquare } from "lucide-react";
 import { Button } from "../components/ui/button";
+import { useAlerts } from "../hooks/useAlerts";
 import { useWaterSystem } from "../hooks/useWaterSystem";
 
 
@@ -22,10 +24,32 @@ export function HomePage() {
     togglePump,
   } = useWaterSystem();
 
+  const {
+    alerts,
+    isLoading: isLoadingAlerts,
+    isRefreshing: isRefreshingAlerts,
+    error: alertsError,
+    lastUpdatedAt: alertsLastUpdatedAt,
+    acknowledgingId,
+    refresh: refreshAlerts,
+    acknowledge: acknowledgeAlert,
+  } = useAlerts();
+
   return (
     <>
       {/* Alerta de Nível */}
       <WaterLevelAlert waterLevel={waterLevel} />
+
+      <IntelligentAlertsPanel
+        alerts={alerts}
+        isLoading={isLoadingAlerts}
+        isRefreshing={isRefreshingAlerts}
+        error={alertsError}
+        lastUpdatedAt={alertsLastUpdatedAt}
+        acknowledgingId={acknowledgingId}
+        onRefresh={refreshAlerts}
+        onAcknowledge={acknowledgeAlert}
+      />
 
       {/* Estatísticas Rápidas */}
       <QuickStats waterLevel={waterLevel} isPumpOn={isPumpOn} />

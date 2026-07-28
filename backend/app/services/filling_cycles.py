@@ -7,7 +7,7 @@ from typing import Any, Dict, Iterable, List, Optional, Set
 from firebase_admin import firestore
 from google.api_core.exceptions import Conflict
 
-from .firestore import _init_firebase_admin_once
+from .firestore import _init_firebase_admin_once, firestore_operation_timeout_seconds
 
 
 FILLING_CYCLES_COLLECTION = os.getenv(
@@ -95,7 +95,9 @@ def save_filling_cycle(cycle: Dict[str, Any]) -> Dict[str, Any]:
                 **cycle,
                 "created_at": firestore.SERVER_TIMESTAMP,
                 "updated_at": firestore.SERVER_TIMESTAMP,
-            }
+            },
+            retry=None,
+            timeout=firestore_operation_timeout_seconds(),
         )
     except Conflict:
         return _cycle_summary(cycle, duplicate=True)

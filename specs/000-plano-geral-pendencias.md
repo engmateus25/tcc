@@ -180,14 +180,13 @@ Validacao apos ATV-001:
 
 Atualizacao apos implementacao local de `ATV-008`, `ATV-009`, `ATV-010` e `ATV-011`:
 
-1. `ATV-012`: exibir alertas no aplicativo usando o modelo persistente de `ATV-011`.
-2. `ATV-015` + `ATV-017`: definir estado confirmado da bomba via MQTT e usar esse contrato para estimar energia.
-3. `ATV-016` + `ATV-018`: calcular consumo de agua a partir dos ciclos validos e melhorar relatorios/download no historico.
-4. `ATV-014`: adicionar buffer offline no firmware usando `event_id`/idempotencia ja disponiveis.
-5. `ATV-013`: organizar configuracoes e secrets por ambiente antes de mobile/deploy real.
-6. `ATV-019` + `ATV-020` + `ATV-021` + `ATV-022`: refatorar provedores LLM, integrar Gemini/modelo Ollama aprovado e melhorar prompt/sessoes.
-7. `ATV-023`: refinar interface quando dados reais de alertas, bomba, consumo e relatorios estiverem disponiveis.
-8. `ATV-024`: configurar Android depois de ambiente, relatorios e URLs estarem estabilizados.
+1. `ATV-015` + `ATV-017`: definir estado confirmado da bomba via MQTT e usar esse contrato para estimar energia.
+2. `ATV-016` + `ATV-018`: calcular consumo de agua a partir dos ciclos validos e melhorar relatorios/download no historico.
+3. `ATV-014`: adicionar buffer offline no firmware usando `event_id`/idempotencia ja disponiveis.
+4. `ATV-013`: organizar configuracoes e secrets por ambiente antes de mobile/deploy real.
+5. `ATV-019` + `ATV-020` + `ATV-021` + `ATV-022`: refatorar provedores LLM, integrar Gemini/modelo Ollama aprovado e melhorar prompt/sessoes.
+6. `ATV-023`: refinar interface quando dados reais de alertas, bomba, consumo e relatorios estiverem disponiveis.
+7. `ATV-024`: configurar Android depois de ambiente, relatorios e URLs estarem estabilizados.
 
 Justificativa: a baseline, o contrato de sensores, a autenticacao do webhook e a idempotencia ja foram implementados e commitados. As proximas atividades foram reordenadas para evitar dependencias ainda ausentes e reduzir retrabalho entre backend, Functions, firmware e frontend.
 
@@ -195,20 +194,19 @@ Justificativa: a baseline, o contrato de sensores, a autenticacao do webhook e a
 
 Grupos recomendados a partir do estado atual:
 
-- Grupo concluido localmente: `ATV-003`, `ATV-005`, `ATV-006`, `ATV-008`, `ATV-009`, `ATV-010`, `ATV-011`. Observacao: aguardam validacao/commit do usuario; emulador Firebase segue como validacao pendente.
-- Grupo A: `ATV-012`. Dependencia atendida: `ATV-011`. Observacao: agora o app pode consumir alertas padronizados do backend.
-- Grupo B: `ATV-015`, `ATV-017`. Dependencias atendidas: nenhuma pendencia bloqueante. Observacao: energia depende de estado confirmado da bomba, entao `ATV-015` vem primeiro no mesmo lote.
-- Grupo C: `ATV-016`, `ATV-018`. Dependencias atendidas para agua: `ATV-009`; idealmente concluir `ATV-017` antes de incluir energia completa nos relatorios.
-- Grupo D: `ATV-014`. Dependencias atendidas: `ATV-002` e `ATV-007`. Observacao: pode ser feito isoladamente porque altera firmware e politica de buffer.
-- Grupo E: `ATV-019`, `ATV-020`, `ATV-021`, `ATV-022`. Dependencia anterior: decisao do usuario sobre Gemini/modelo local antes de `ATV-020`/`ATV-021`. Observacao: `ATV-019` deve abrir esse lote.
-- Grupo F: `ATV-013`, `ATV-024`. Dependencia anterior para Android: `ATV-013` e URL/HTTPS definidos. Observacao: configuracao por ambiente deve vir antes de validar mobile.
-- Grupo G: `ATV-023`. Dependencias anteriores: alertas, bomba, consumo e relatorios integrados.
+- Grupo concluido localmente: `ATV-003`, `ATV-005`, `ATV-006`, `ATV-008`, `ATV-009`, `ATV-010`, `ATV-011`, `ATV-012`. Observacao: aguardam validacao/commit do usuario; emulador Firebase segue como validacao pendente.
+- Grupo A: `ATV-015`, `ATV-017`. Dependencias atendidas: nenhuma pendencia bloqueante. Observacao: energia depende de estado confirmado da bomba, entao `ATV-015` vem primeiro no mesmo lote.
+- Grupo B: `ATV-016`, `ATV-018`. Dependencias atendidas para agua: `ATV-009`; idealmente concluir `ATV-017` antes de incluir energia completa nos relatorios.
+- Grupo C: `ATV-014`. Dependencias atendidas: `ATV-002` e `ATV-007`. Observacao: pode ser feito isoladamente porque altera firmware e politica de buffer.
+- Grupo D: `ATV-019`, `ATV-020`, `ATV-021`, `ATV-022`. Dependencia anterior: decisao do usuario sobre Gemini/modelo local antes de `ATV-020`/`ATV-021`. Observacao: `ATV-019` deve abrir esse lote.
+- Grupo E: `ATV-013`, `ATV-024`. Dependencia anterior para Android: `ATV-013` e URL/HTTPS definidos. Observacao: configuracao por ambiente deve vir antes de validar mobile.
+- Grupo F: `ATV-023`. Dependencias anteriores: alertas, bomba, consumo e relatorios integrados.
 
 ## Proxima atividade implementavel apos aprovacao
 
-Primeiro grupo recomendado agora: `ATV-012`.
+Primeiro grupo recomendado agora: `ATV-015` e `ATV-017`.
 
-Motivo: o backend ja gera, persiste, consulta e reconhece alertas padronizados. O proximo passo mais direto e exibir esses alertas no aplicativo antes de expandir consumo, energia e relatorios.
+Motivo: o app ja exibe os alertas persistidos. O proximo passo mais seguro e estabilizar o estado confirmado da bomba antes de estimar energia e antes de incluir esse dado em relatorios.
 
 ## Backlog tecnico
 
@@ -499,10 +497,10 @@ Motivo: o backend ja gera, persiste, consulta e reconhece alertas padronizados. 
 - Pendencias relacionadas: alertas no aplicativo, anomalias, nao repetir alerta para mesmo evento.
 - Objetivo: padronizar alertas para backend e frontend.
 - Contexto encontrado no codigo: `sensor_realtime.py` gravava dicionarios livres em `alerts`; frontend ainda nao le alertas persistidos.
-- Situacao atual: implementada localmente no backend; exibicao no frontend continua em `ATV-012`.
+- Situacao atual: implementada localmente no backend; exibicao no frontend foi implementada em `ATV-012`.
 - Proposta de solucao: criar schema de alerta com `id`, `event_id`, `type`, `severity`, `title`, `message`, `detected_at`, `sensor_timestamp`, `status`, `possible_causes`, `metadata`, `acknowledged`, `acknowledged_at`.
 - Backend afetado: schemas, service de alertas, rotas GET/PATCH.
-- Frontend afetado: futuro service Firestore/API e componentes de lista/ack em `ATV-012`.
+- Frontend afetado: service HTTP, hook e painel implementados em `ATV-012`.
 - Firmware afetado: nenhum direto.
 - Firebase ou servicos externos afetados: colecao `alerts`.
 - Contratos e payloads envolvidos:
@@ -535,21 +533,22 @@ Motivo: o backend ja gera, persiste, consulta e reconhece alertas padronizados. 
 - Titulo: Alertas inteligentes no frontend.
 - Pendencias relacionadas: alertas no aplicativo, estados de loading/erro, responsividade.
 - Objetivo: mostrar anomalias detectadas sem depender de alertas de nivel mockados.
-- Contexto encontrado no codigo: `WaterLevelAlert` usa apenas percentual mockado; app nao escuta colecao `alerts`.
-- Situacao atual: nao implementado.
+- Contexto encontrado no codigo: `WaterLevelAlert` usa apenas percentual mockado; app nao consumia alertas persistidos.
+- Situacao atual: implementada localmente consumindo o backend.
 - Proposta de solucao: criar service/hook para alertas, resumo no dashboard, lista com severidade e status, acao de reconhecer alerta.
-- Backend afetado: APIs de alerta se o frontend nao usar Firestore direto.
-- Frontend afetado: HomePage, HistoryPage, services/hooks, componentes.
+- Backend afetado: rotas de alerta persistido e testes de endpoints.
+- Frontend afetado: HomePage, services/hooks, componentes.
 - Firmware afetado: nenhum.
-- Firebase ou servicos externos afetados: colecao `alerts` com listener ou API backend.
+- Firebase ou servicos externos afetados: colecao `alerts` acessada pelo backend; frontend usa API backend.
 - Contratos e payloads envolvidos: modelo de `ATV-011`.
 - Dependencias: `ATV-011`, `ATV-001`.
-- Riscos: misturar leitura direta Firestore e backend pode duplicar regras de permissao; escolher um caminho.
-- Perguntas pendentes: o app deve ler alertas diretamente do Firestore ou sempre via backend?
+- Riscos: polling nao e realtime puro; para TCC e suficiente sem duplicar leitura Firestore no app.
+- Perguntas pendentes: intervalo de polling deve permanecer em 15 segundos ou ser ajustado para ambiente de banca?
 - Criterios de aceite: novo alerta aparece sem reload; duplicados nao aparecem; usuario pode reconhecer alerta.
-- Plano de testes: listener com alerta mockado, estado sem alertas, erro de conexao, mobile pequeno.
-- Arquivos provavelmente afetados: `frontend/src/services/alertService.ts`, `frontend/src/hooks/useAlerts.ts`, `frontend/src/pages/HomePage.tsx`, `frontend/src/pages/HistoryPage.tsx`.
-- Status: PENDENTE.
+- Plano de testes: pytest dos endpoints, `tsc`, `lint`, `build`, estado sem alertas, erro de conexao e reconhecimento.
+- Arquivos provavelmente afetados: `frontend/src/services/alerts.ts`, `frontend/src/hooks/useAlerts.ts`, `frontend/src/components/IntelligentAlertsPanel.tsx`, `frontend/src/pages/HomePage.tsx`, `backend/tests/test_alert_endpoints.py`.
+- Status: AGUARDANDO VALIDACAO.
+- Resultado da validacao local: criado painel `IntelligentAlertsPanel` na Home, hook `useAlerts` com polling de 15 segundos, service HTTP para `GET /alerts` e `PATCH /alerts/{alert_id}/ack`, estados de loading/erro/vazio e acao de reconhecer alerta. O backend foi ajustado para expor as rotas sob `/alerts`, limitar chamadas Firestore, retornar `503` claro em falhas de credencial/conectividade e pytest cobre registro das rotas, chamadas diretas dos endpoints e falhas operacionais do Firestore.
 - Resultado da validacao do usuario: _a preencher_.
 
 ### ATV-013 - Organizar configuracoes e secrets por ambiente
@@ -930,12 +929,22 @@ Motivo: o backend ja gera, persiste, consulta e reconhece alertas padronizados. 
 - `cd backend && source .venv/bin/activate && python -c "import app.main; print('backend import ok')"`: passou.
 - `git diff --check`: passou.
 
+## Validacoes executadas apos ATV-012
+
+- `cd backend && source .venv/bin/activate && pytest`: passou com 28 testes, incluindo endpoints de alertas persistidos e resposta `503` para falhas operacionais do Firestore.
+- `cd backend && source .venv/bin/activate && python -m compileall app tests`: passou.
+- `GET /alerts?period=7d&status=open&limit=1` com backend local: retornou `503 Service Unavailable` claro quando a credencial Firebase Admin atual falhou.
+- `POST /alerts/sensor-event` com backend local: retornou `503 Service Unavailable` claro quando a credencial Firebase Admin atual falhou.
+- `cd frontend && npm exec tsc -- --noEmit`: passou.
+- `cd frontend && npm run lint`: passou com 6 avisos nao bloqueantes de `react-refresh/only-export-components`.
+- `cd frontend && npm run build`: passou com avisos nao bloqueantes de Browserslist/Baseline desatualizados e chunks acima de 500 kB.
+- `git diff --check`: passou.
+
 ## Testes nao executados nesta etapa
 
 - Firebase Emulator: nao executado porque ainda falta definir project alias real, Firebase CLI/secrets e estrategia de URL para o backend local/homologacao.
 - Deploy Firebase/backend/mobile: fora de escopo nesta etapa.
-- Cypress E2E e Vitest unitario do frontend: nao executados nesta revalidacao de ambiente; foram priorizados `tsc`, `lint` e `build`.
-- Testes frontend nao foram repetidos neste lote porque as mudancas foram apenas no backend e documentacao.
+- Cypress E2E e Vitest unitario do frontend: nao executados nesta revalidacao; foram priorizados `tsc`, `lint`, build e pytest dos endpoints backend.
 - Compilacao Arduino: nao ha ambiente Arduino/ESP32 configurado nesta sessao.
 
 ## Riscos gerais
@@ -948,6 +957,6 @@ Motivo: o backend ja gera, persiste, consulta e reconhece alertas padronizados. 
 
 ## Proximo passo recomendado
 
-Aguardar revisao e commit do lote `ATV-008`, `ATV-009`, `ATV-010` e `ATV-011`.
+Aguardar revisao e commit do lote `ATV-012`.
 
-Depois disso, iniciar `ATV-012`: exibicao dos alertas persistidos no aplicativo.
+Depois disso, iniciar `ATV-015` + `ATV-017`: estado confirmado da bomba e estimativa de energia.
