@@ -7,11 +7,14 @@ WiFiClient espClient;
 PubSubClient mqttClient(espClient);
 
 // ===================== WIFI / MQTT =====================
-const char* ssid = "wifi-zone-ufam-1";
-const char* password = "";
+const char* ssid = "eng.mateus";
+const char* password = "casamelo09";
 
 const char* mqtt_server = "broker.hivemq.com";
 const int mqtt_port = 1883;
+const char* MQTT_CONTROL_TOPIC = "bomba/controle";
+const char* MQTT_CONTROL_V2_TOPIC = "bomba/controle/v2";
+const char* MQTT_STATE_TOPIC = "bomba/estado";
 
 // ===================== FIRESTORE =====================
 // Coleção sensores
@@ -91,12 +94,41 @@ void callbackMQTT(char* topic, byte* payload, unsigned int length);
 
 void verificarSensor(int pino, bool &ultimoEstado, const char* nome);
 void avaliarEAplicarControle(const char* motivo);
+void avaliarEAplicarControleDetalhado(const char* motivo, const String& commandId, const String& requestedSource);
+void processarComandoRemoto(const String& commandId, const String& nome, bool desiredOn);
 
-void ativarBomba();
-void desligarBomba();
+bool ativarBomba();
+bool desligarBomba();
 
 void enviarDadosFirestore(const char* sensor, const String& estado);
 void enviarComandoFirestore(const String& mensagem, const String& acionamento);
+void enviarComandoFirestoreDetalhado(
+  const String& mensagem,
+  const String& acionamento,
+  bool requestedState,
+  bool appliedState,
+  bool applied,
+  bool confirmed,
+  bool stateChanged,
+  const String& overriddenBy,
+  const String& priority,
+  const String& commandId,
+  const String& reason
+);
+void publicarEstadoBomba(
+  bool pumpOn,
+  const String& mode,
+  const String& source,
+  bool confirmed,
+  bool applied,
+  const String& overriddenBy,
+  const String& priority,
+  const String& commandId,
+  const String& reason
+);
+String gerarCommandId(const String& prefix);
+String extrairStringJson(const String& json, const String& key);
+bool extrairBoolJson(const String& json, const String& key, bool fallback);
 
 static String escapeJson(const String& s) {
   // Escape básico para evitar quebrar JSON
@@ -204,7 +236,19 @@ void conectarMQTT() {
     Serial.print("Conectando ao MQTT...");
     if (mqttClient.connect("esp32_client")) {
       Serial.println("Conectado!");
-      mqttClient.subscribe("bomba/controle");
+      mqttClient.subscribe(MQTT_CONTROL_TOPIC);
+      mqttClient.subscribe(MQTT_CONTROL_V2_TOPIC);
+      publicarEstadoBomba(
+        bombaComandadaLigada,
+        "boot",
+        "firmware",
+        false,
+        true,
+        "",
+        "boot",
+        gerarCommandId("boot"),
+        "mqtt conectado"
+      );
     } else {
       Serial.print(".");
       delay(2000);
@@ -213,6 +257,7 @@ void conectarMQTT() {
 }
 
 void callbackMQTT(char* topic, byte* payload, unsigned int length) {
+  String topicName = String(topic);
   String mensagem;
   for (unsigned int i = 0; i < length; i++) {
     mensagem += (char)payload[i];
@@ -220,6 +265,28 @@ void callbackMQTT(char* topic, byte* payload, unsigned int length) {
 
   Serial.print("MQTT recebido: ");
   Serial.println(mensagem);
+
+  if (topicName == MQTT_CONTROL_V2_TOPIC) {
+    String commandId = extrairStringJson(mensagem, "command_id");
+    if (commandId.length() == 0) {
+      commandId = gerarCommandId("mqtt");
+    }
+
+    bool desiredOn = extrairBoolJson(mensagem, "desired_on", false);
+    String command = extrairStringJson(mensagem, "command");
+    command.toLowerCase();
+    if (command == "ligar") {
+      desiredOn = true;
+    } else if (command == "desligar") {
+      desiredOn = false;
+    } else if (mensagem.indexOf("\"desired_on\"") < 0) {
+      Serial.println("JSON MQTT ignorado: comando ausente.");
+      return;
+    }
+
+    processarComandoRemoto(commandId, "bomba", desiredOn);
+    return;
+  }
 
   // Espera formato: "<nome> ligar" ou "<nome> desligar"
   int espaco = mensagem.indexOf(' ');
@@ -230,33 +297,9 @@ void callbackMQTT(char* topic, byte* payload, unsigned int length) {
   comando.trim();
 
   if (comando == "ligar") {
-    remoteHasCommand = true;
-    remoteDesiredOn = true;
-
-    // Se físico estiver ON, ignora efetividade, mas registra (útil p/ auditoria)
-    if (digitalRead(ACIONAMENTO_FISICO_PIN) == HIGH) {
-      Serial.println("Remoto IGNORADO (físico ativo).");
-      enviarComandoFirestore(nome + " pediu LIGAR (ignorado: físico ativo)", "remoto");
-      return;
-    }
-
-    Serial.println("Remoto aplicado: LIGAR");
-    avaliarEAplicarControle("mqtt ligar");
-    enviarComandoFirestore(nome + " ligou", "remoto");
-
+    processarComandoRemoto(gerarCommandId("legacy"), nome, true);
   } else if (comando == "desligar") {
-    remoteHasCommand = true;
-    remoteDesiredOn = false;
-
-    if (digitalRead(ACIONAMENTO_FISICO_PIN) == HIGH) {
-      Serial.println("Remoto IGNORADO (físico ativo).");
-      enviarComandoFirestore(nome + " pediu DESLIGAR (ignorado: físico ativo)", "remoto");
-      return;
-    }
-
-    Serial.println("Remoto aplicado: DESLIGAR");
-    avaliarEAplicarControle("mqtt desligar");
-    enviarComandoFirestore(nome + " desligar", "remoto");
+    processarComandoRemoto(gerarCommandId("legacy"), nome, false);
   }
 }
 
@@ -302,15 +345,46 @@ void verificarSensor(int pino, bool &ultimoEstado, const char* nome) {
   }
 
   if (autoChanged) {
-    // só tenta aplicar se não houver físico e se remoto não estiver mandando
+    if (digitalRead(ACIONAMENTO_FISICO_PIN) == HIGH || remoteHasCommand) {
+      String overriddenBy = digitalRead(ACIONAMENTO_FISICO_PIN) == HIGH ? "físico" : "remoto";
+      String commandId = gerarCommandId("auto");
+      String mensagem = autoDesiredOn ? "bomba ligar" : "bomba desligar";
+      enviarComandoFirestoreDetalhado(
+        mensagem,
+        "automático",
+        autoDesiredOn,
+        bombaComandadaLigada,
+        false,
+        true,
+        false,
+        overriddenBy,
+        overriddenBy,
+        commandId,
+        "automatico sobreposto por prioridade"
+      );
+      publicarEstadoBomba(
+        bombaComandadaLigada,
+        overriddenBy,
+        "automático",
+        true,
+        false,
+        overriddenBy,
+        overriddenBy,
+        commandId,
+        "automatico sobreposto por prioridade"
+      );
+    }
+
     avaliarEAplicarControle("evento sensor (auto)");
-    // opcional: registrar comando automático apenas quando ele realmente muda a bomba
-    // (o registro final acontece dentro de avaliarEAplicarControle quando houver mudança)
   }
 }
 
 // ===================== PRIORIDADE E APLICAÇÃO =====================
 void avaliarEAplicarControle(const char* motivo) {
+  avaliarEAplicarControleDetalhado(motivo, "", "");
+}
+
+void avaliarEAplicarControleDetalhado(const char* motivo, const String& commandId, const String& requestedSource) {
   bool fisico = (digitalRead(ACIONAMENTO_FISICO_PIN) == HIGH);
 
   bool desiredOn = false;
@@ -327,8 +401,40 @@ void avaliarEAplicarControle(const char* motivo) {
     acionamento = "automático";
   }
 
-  // Se não mudou, não faz nada
-  if (desiredOn == bombaComandadaLigada) return;
+  String effectiveCommandId = commandId;
+  if (effectiveCommandId.length() == 0) {
+    effectiveCommandId = gerarCommandId(acionamento);
+  }
+
+  if (desiredOn == bombaComandadaLigada) {
+    if (commandId.length() > 0 || requestedSource.length() > 0) {
+      enviarComandoFirestoreDetalhado(
+        desiredOn ? "bomba ligar" : "bomba desligar",
+        acionamento,
+        desiredOn,
+        bombaComandadaLigada,
+        true,
+        true,
+        false,
+        "",
+        acionamento,
+        effectiveCommandId,
+        "estado ja estava aplicado"
+      );
+      publicarEstadoBomba(
+        bombaComandadaLigada,
+        acionamento,
+        requestedSource.length() > 0 ? requestedSource : acionamento,
+        true,
+        true,
+        "",
+        acionamento,
+        effectiveCommandId,
+        "estado ja estava aplicado"
+      );
+    }
+    return;
+  }
 
   Serial.print("Aplicando controle (");
   Serial.print(motivo);
@@ -337,19 +443,80 @@ void avaliarEAplicarControle(const char* motivo) {
   Serial.print(" | acionamento=");
   Serial.println(acionamento);
 
+  bool confirmed = false;
   if (desiredOn) {
-    ativarBomba();
+    confirmed = ativarBomba();
     bombaComandadaLigada = true;
-    enviarComandoFirestore("bomba ligar", acionamento);
   } else {
-    desligarBomba();
+    confirmed = desligarBomba();
     bombaComandadaLigada = false;
-    enviarComandoFirestore("bomba desligar", acionamento);
   }
+
+  enviarComandoFirestoreDetalhado(
+    desiredOn ? "bomba ligar" : "bomba desligar",
+    acionamento,
+    desiredOn,
+    bombaComandadaLigada,
+    true,
+    confirmed,
+    true,
+    "",
+    acionamento,
+    effectiveCommandId,
+    String(motivo)
+  );
+  publicarEstadoBomba(
+    bombaComandadaLigada,
+    acionamento,
+    requestedSource.length() > 0 ? requestedSource : acionamento,
+    confirmed,
+    true,
+    "",
+    acionamento,
+    effectiveCommandId,
+    String(motivo)
+  );
+}
+
+void processarComandoRemoto(const String& commandId, const String& nome, bool desiredOn) {
+  remoteHasCommand = true;
+  remoteDesiredOn = desiredOn;
+
+  if (digitalRead(ACIONAMENTO_FISICO_PIN) == HIGH) {
+    Serial.println("Remoto IGNORADO (físico ativo).");
+    enviarComandoFirestoreDetalhado(
+      desiredOn ? nome + " pediu LIGAR" : nome + " pediu DESLIGAR",
+      "remoto",
+      desiredOn,
+      bombaComandadaLigada,
+      false,
+      true,
+      false,
+      "físico",
+      "físico",
+      commandId,
+      "comando remoto sobreposto por acionamento fisico"
+    );
+    publicarEstadoBomba(
+      bombaComandadaLigada,
+      "manual chave",
+      "remoto",
+      true,
+      false,
+      "físico",
+      "físico",
+      commandId,
+      "comando remoto sobreposto por acionamento fisico"
+    );
+    return;
+  }
+
+  Serial.println(desiredOn ? "Remoto recebido: LIGAR" : "Remoto recebido: DESLIGAR");
+  avaliarEAplicarControleDetalhado(desiredOn ? "mqtt ligar" : "mqtt desligar", commandId, "remoto");
 }
 
 // ===================== BOMBA =====================
-void ativarBomba() {
+bool ativarBomba() {
   Serial.println("Ativando bomba...");
   digitalWrite(BOMBA_ATIVACAO_PIN, HIGH);
   delay(100);
@@ -359,15 +526,24 @@ void ativarBomba() {
   while (millis() - inicio < 5000) {
     if (digitalRead(BOMBA_STATUS_PIN) == HIGH) {
       Serial.println("Bomba ligada (status OK)!");
-      return;
+      return true;
     }
   }
   Serial.println("Aviso: status não confirmou em 5s (mas comando foi enviado).");
+  return false;
 }
 
-void desligarBomba() {
+bool desligarBomba() {
   Serial.println("Desligando bomba...");
   digitalWrite(BOMBA_ATIVACAO_PIN, LOW);
+  delay(100);
+  bool confirmed = digitalRead(BOMBA_STATUS_PIN) == LOW;
+  if (confirmed) {
+    Serial.println("Bomba desligada (status OK)!");
+  } else {
+    Serial.println("Aviso: status não confirmou desligamento.");
+  }
+  return confirmed;
 }
 
 // ===================== FIRESTORE =====================
@@ -401,6 +577,35 @@ void enviarDadosFirestore(const char* sensor, const String& estado) {
 }
 
 void enviarComandoFirestore(const String& mensagem, const String& acionamento) {
+  bool requestedState = mensagem.indexOf("deslig") < 0;
+  enviarComandoFirestoreDetalhado(
+    mensagem,
+    acionamento,
+    requestedState,
+    bombaComandadaLigada,
+    true,
+    true,
+    true,
+    "",
+    acionamento,
+    gerarCommandId("legacy"),
+    "registro legado"
+  );
+}
+
+void enviarComandoFirestoreDetalhado(
+  const String& mensagem,
+  const String& acionamento,
+  bool requestedState,
+  bool appliedState,
+  bool applied,
+  bool confirmed,
+  bool stateChanged,
+  const String& overriddenBy,
+  const String& priority,
+  const String& commandId,
+  const String& reason
+) {
   if (WiFi.status() != WL_CONNECTED) {
     Serial.println("Erro: WiFi não conectado (comandos).");
     return;
@@ -413,6 +618,16 @@ void enviarComandoFirestore(const String& mensagem, const String& acionamento) {
     "{ \"fields\": { "
       "\"bomba\": { \"stringValue\": \"" + escapeJson(mensagem) + "\" }, "
       "\"acionamento\": { \"stringValue\": \"" + escapeJson(acionamento) + "\" }, "
+      "\"source\": { \"stringValue\": \"" + escapeJson(acionamento) + "\" }, "
+      "\"command_id\": { \"stringValue\": \"" + escapeJson(commandId) + "\" }, "
+      "\"requested_state\": { \"booleanValue\": " + String(requestedState ? "true" : "false") + " }, "
+      "\"applied_state\": { \"booleanValue\": " + String(appliedState ? "true" : "false") + " }, "
+      "\"applied\": { \"booleanValue\": " + String(applied ? "true" : "false") + " }, "
+      "\"confirmed\": { \"booleanValue\": " + String(confirmed ? "true" : "false") + " }, "
+      "\"state_changed\": { \"booleanValue\": " + String(stateChanged ? "true" : "false") + " }, "
+      "\"priority\": { \"stringValue\": \"" + escapeJson(priority) + "\" }, "
+      "\"overridden_by\": { \"stringValue\": \"" + escapeJson(overriddenBy) + "\" }, "
+      "\"reason\": { \"stringValue\": \"" + escapeJson(reason) + "\" }, "
       "\"timestamp\": { \"timestampValue\": \"" + getISOTimeUTC() + "\" } "
     "} }";
 
@@ -427,4 +642,67 @@ void enviarComandoFirestore(const String& mensagem, const String& acionamento) {
                   http.errorToString(httpResponseCode).c_str());
   }
   http.end();
+}
+
+void publicarEstadoBomba(
+  bool pumpOn,
+  const String& mode,
+  const String& source,
+  bool confirmed,
+  bool applied,
+  const String& overriddenBy,
+  const String& priority,
+  const String& commandId,
+  const String& reason
+) {
+  if (!mqttClient.connected()) return;
+
+  String payload =
+    "{"
+      "\"schema_version\":1,"
+      "\"pump_on\":" + String(pumpOn ? "true" : "false") + ","
+      "\"mode\":\"" + escapeJson(mode) + "\","
+      "\"confirmed\":" + String(confirmed ? "true" : "false") + ","
+      "\"applied\":" + String(applied ? "true" : "false") + ","
+      "\"source\":\"" + escapeJson(source) + "\","
+      "\"priority\":\"" + escapeJson(priority) + "\","
+      "\"overridden_by\":\"" + escapeJson(overriddenBy) + "\","
+      "\"command_id\":\"" + escapeJson(commandId) + "\","
+      "\"reason\":\"" + escapeJson(reason) + "\","
+      "\"timestamp\":\"" + getISOTimeUTC() + "\""
+    "}";
+
+  mqttClient.publish(MQTT_STATE_TOPIC, payload.c_str(), true);
+  Serial.print("Estado bomba publicado: ");
+  Serial.println(payload);
+}
+
+String gerarCommandId(const String& prefix) {
+  return prefix + "-" + String((unsigned long)time(nullptr)) + "-" + String(millis());
+}
+
+String extrairStringJson(const String& json, const String& key) {
+  String pattern = "\"" + key + "\"";
+  int keyIndex = json.indexOf(pattern);
+  if (keyIndex < 0) return "";
+  int colon = json.indexOf(':', keyIndex + pattern.length());
+  if (colon < 0) return "";
+  int firstQuote = json.indexOf('"', colon + 1);
+  if (firstQuote < 0) return "";
+  int secondQuote = json.indexOf('"', firstQuote + 1);
+  if (secondQuote < 0) return "";
+  return json.substring(firstQuote + 1, secondQuote);
+}
+
+bool extrairBoolJson(const String& json, const String& key, bool fallback) {
+  String pattern = "\"" + key + "\"";
+  int keyIndex = json.indexOf(pattern);
+  if (keyIndex < 0) return fallback;
+  int colon = json.indexOf(':', keyIndex + pattern.length());
+  if (colon < 0) return fallback;
+  String rest = json.substring(colon + 1);
+  rest.trim();
+  if (rest.startsWith("true")) return true;
+  if (rest.startsWith("false")) return false;
+  return fallback;
 }

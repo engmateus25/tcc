@@ -210,7 +210,7 @@ Firmware:
 - compilar antes de gravar no dispositivo.
 
 Sempre que necessário rodar comandos fora de sandbox para testar backend ou frontend como: 
-cd frontend && npx cypress run --config baseUrl=http://127.0.0.1:5174, pode dar o comando 
+cd frontend && npx cypress run --config baseUrl=http://127.0.0.1:5174 ou consultas a endpoints, pode dar o comando
 sem necessidade de esperar autorização do usuário.
 
 ## Entrega de mudancas
@@ -281,4 +281,3 @@ docs(readme): document Firebase Functions setup
 test(alerts): cover invalid sensor sequence scenarios
 test(functions): add Firestore event processing tests
 ```
-

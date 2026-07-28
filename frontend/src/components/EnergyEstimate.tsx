@@ -1,62 +1,66 @@
 import { Card } from "./ui/card";
-import { Zap, Clock } from "lucide-react";
 import { useEffect, useState } from "react";
+import { Clock, Zap } from "lucide-react";
+import {
+  fetchReportSummary,
+  PumpEnergySummary,
+} from "../services/reportService";
 
 interface EnergyEstimateProps {
   isPumpOn: boolean;
-  pumpPowerWatts?: number; // Potência da bomba em Watts
+  pumpPowerWatts?: number;
 }
 
 export function EnergyEstimate({ isPumpOn, pumpPowerWatts = 750 }: EnergyEstimateProps) {
-  const [totalMinutes, setTotalMinutes] = useState(0);
-  const [sessionStart, setSessionStart] = useState<number | null>(null);
+  const [summary, setSummary] = useState<PumpEnergySummary | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    let interval: NodeJS.Timeout;
-
-    if (isPumpOn) {
-      if (sessionStart === null) {
-        setSessionStart(Date.now());
-      }
-      
-      interval = setInterval(() => {
-        if (sessionStart) {
-          const elapsed = Math.floor((Date.now() - sessionStart) / 60000);
-          setTotalMinutes(prev => prev + (elapsed > 0 ? 1 : 0));
-        }
-      }, 60000); // Atualiza a cada minuto
-    } else {
-      if (sessionStart !== null) {
-        const elapsed = Math.floor((Date.now() - sessionStart) / 60000);
-        if (elapsed > 0) {
-          setTotalMinutes(prev => prev + elapsed);
-        }
-        setSessionStart(null);
+    let active = true;
+    async function loadEnergy() {
+      try {
+        const report = await fetchReportSummary("7d");
+        if (!active) return;
+        setSummary(report.pump_energy);
+        setError(null);
+      } catch (err) {
+        if (!active) return;
+        setError(err instanceof Error ? err.message : "Erro ao carregar energia");
       }
     }
-
+    void loadEnergy();
+    const interval = window.setInterval(() => {
+      void loadEnergy();
+    }, 60000);
     return () => {
-      if (interval) clearInterval(interval);
+      active = false;
+      window.clearInterval(interval);
     };
-  }, [isPumpOn, sessionStart]);
+  }, []);
 
-  // Cálculo de energia: (Potência em W × Tempo em horas) / 1000 = kWh
-  const hours = totalMinutes / 60;
-  const energyKwh = (pumpPowerWatts * hours) / 1000;
-  
-  // Estimativa de custo (R$ 0,656 por kWh - média Brasil)
-  const costEstimate = energyKwh * 0.656;
+  const totalMinutes = Math.round(summary?.total_on_minutes ?? 0);
+  const hours = summary?.total_on_hours ?? 0;
+  const energyKwh = summary?.total_kwh ?? 0;
+  const costEstimate = summary?.total_cost_brl ?? 0;
+  const configuredPowerWatts = Math.round((summary?.pump_power_kw ?? pumpPowerWatts / 1000) * 1000);
 
   return (
     <Card className="p-4">
       <div className="flex items-center gap-2 mb-3">
         <Zap className="w-5 h-5 text-yellow-600" />
-        <p className="text-sm text-slate-600">Estimativa de Consumo</p>
+        <p className="text-sm text-slate-600">Energia da bomba</p>
       </div>
-      
+
       <div className="space-y-3">
         <div className="flex justify-between items-center">
-          <span className="text-sm text-slate-600">Tempo ligada:</span>
+          <span className="text-sm text-slate-600">Estado atual:</span>
+          <span className={isPumpOn ? "text-sm text-green-700" : "text-sm text-slate-600"}>
+            {isPumpOn ? "Ligada" : "Desligada"}
+          </span>
+        </div>
+
+        <div className="flex justify-between items-center">
+          <span className="text-sm text-slate-600">Tempo confirmado:</span>
           <div className="flex items-center gap-1">
             <Clock className="w-4 h-4 text-slate-500" />
             <span className="text-sm">
@@ -76,10 +80,16 @@ export function EnergyEstimate({ isPumpOn, pumpPowerWatts = 750 }: EnergyEstimat
             R$ {costEstimate.toFixed(2)}
           </span>
         </div>
-        
+
         <p className="text-xs text-slate-400 mt-2">
-          Baseado em {pumpPowerWatts}W (dados do fabricante)
+          Baseado em eventos confirmados e {configuredPowerWatts}W configurados
         </p>
+        {summary && summary.ignored_event_count > 0 && (
+          <p className="text-xs text-amber-600">
+            {summary.ignored_event_count} comando(s) sobreposto(s) não entraram no cálculo.
+          </p>
+        )}
+        {error && <p className="text-xs text-red-600">{error}</p>}
       </div>
     </Card>
   );

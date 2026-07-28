@@ -1,7 +1,11 @@
 // src/hooks/useWaterSystem.ts
 import { useEffect, useMemo, useState, useCallback } from "react";
 import type { LastSensor, PumpMode } from "../types/water-system";
-import client, { enviarComando } from "../services/mqttService";
+import client, {
+  enviarComando,
+  parsePumpStateMessage,
+  PumpStateMessage,
+} from "../services/mqttService";
 import { listenUltimoEstado, UltimoEvento } from "../services/firestoreService";
 
 type State = {
@@ -10,6 +14,11 @@ type State = {
   pumpMode: PumpMode;
   lastSensor: LastSensor | null;
   isConnected: { firebase: boolean; mqtt: boolean };
+  pendingCommand: {
+    commandId: string;
+    desiredOn: boolean;
+  } | null;
+  lastPumpStatus: string | null;
 };
 
 function isLastSensorAction(value: string): value is LastSensor["action"] {
@@ -31,6 +40,8 @@ const initialState: State = {
   pumpMode: "automático",
   lastSensor: { name: "alto", action: "subiu", time: "04:11:37" },
   isConnected: { firebase: false, mqtt: false },
+  pendingCommand: null,
+  lastPumpStatus: null,
 };
 
 export function useWaterSystem() {
@@ -79,27 +90,10 @@ export function useWaterSystem() {
       try {
         const text = payload.toString().trim();
 
-        // Espera algo como "ligada"/"desligada" OU JSON {"isOn":true,"mode":"automático"}
-        let isOn: boolean | null = null;
-        let mode: PumpMode | null = null;
+        const pumpState = parsePumpStateMessage(text);
+        if (!pumpState) return;
 
-        if (text.startsWith("{")) {
-          const obj = JSON.parse(text) as { isOn?: unknown; mode?: unknown };
-          if (typeof obj.isOn === "boolean") isOn = obj.isOn;
-          if (isPumpMode(obj.mode)) mode = obj.mode;
-        } else {
-          const lower = text.toLowerCase();
-          if (lower.includes("ligad")) isOn = true;
-          if (lower.includes("deslig")) isOn = false;
-        }
-
-        if (isOn !== null) {
-          setState((s) => ({
-            ...s,
-            isPumpOn: isOn!,
-            pumpMode: mode ?? s.pumpMode,
-          }));
-        }
+        setState((s) => applyPumpStateMessage(s, pumpState));
       } catch (e) {
         console.warn("Falha ao parsear mensagem MQTT:", e);
       }
@@ -124,12 +118,17 @@ export function useWaterSystem() {
   // ---- Ação do UI: alternar bomba (publica em `bomba/controle`) ----
   const togglePump = useCallback(() => {
     const target = !state.isPumpOn;
+    const result = enviarComando("bomba", target ? "ligar" : "desligar");
 
-    // 1) publicar comando usando SEU serviço (nome é livre; pode usar "bomba")
-    enviarComando("bomba", target ? "ligar" : "desligar");
-
-    // 2) UI otimista
-    setState((s) => ({ ...s, isPumpOn: target }));
+    setState((s) => ({
+      ...s,
+      pendingCommand: result.published
+        ? { commandId: result.commandId, desiredOn: result.desiredOn }
+        : null,
+      lastPumpStatus: result.published
+        ? "Aguardando confirmação da bomba"
+        : "MQTT desconectado; comando não publicado",
+    }));
   }, [state.isPumpOn]);
 
   return useMemo(() => ({
@@ -137,7 +136,46 @@ export function useWaterSystem() {
     isPumpOn: state.isPumpOn,
     pumpMode: state.pumpMode,
     lastSensor: state.lastSensor!,
+    pendingPumpCommand: state.pendingCommand,
+    pumpStatusMessage: state.lastPumpStatus,
     isConnected: state.isConnected,    // usado pela status bar (Firebase/MQTT)
     togglePump,
   }), [state, togglePump]);
+}
+
+function applyPumpStateMessage(state: State, message: PumpStateMessage): State {
+  const commandMatches = !message.commandId || state.pendingCommand?.commandId === message.commandId;
+  const pendingCommand = commandMatches ? null : state.pendingCommand;
+  const nextMode = normalizePumpMode(message.mode || message.source) ?? state.pumpMode;
+
+  if (!message.applied) {
+    return {
+      ...state,
+      pumpMode: nextMode,
+      pendingCommand,
+      lastPumpStatus: message.overriddenBy
+        ? `Comando sobreposto por ${message.overriddenBy}`
+        : "Comando não aplicado",
+    };
+  }
+
+  return {
+    ...state,
+    isPumpOn: message.confirmed ? message.pumpOn : state.isPumpOn,
+    pumpMode: nextMode,
+    pendingCommand,
+    lastPumpStatus: message.confirmed
+      ? "Estado confirmado pela bomba"
+      : "Comando aplicado sem confirmação física",
+  };
+}
+
+function normalizePumpMode(value: unknown): PumpMode | null {
+  if (isPumpMode(value)) return value;
+  if (typeof value !== "string") return null;
+  const text = value.trim().toLowerCase();
+  if (text === "remoto" || text === "mqtt" || text === "frontend") return "manual mqtt";
+  if (text === "físico" || text === "fisico" || text === "manual chave") return "manual chave";
+  if (text === "auto" || text === "automático" || text === "automatico") return "automático";
+  return null;
 }

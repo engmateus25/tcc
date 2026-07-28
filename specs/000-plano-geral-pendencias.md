@@ -604,7 +604,7 @@ Motivo: o app ja exibe os alertas persistidos. O proximo passo mais seguro e est
 - Pendencias relacionadas: comando enviado versus bomba realmente ligada, consumo eletrico, feedback de comando.
 - Objetivo: separar comando desejado, comando aplicado e estado confirmado.
 - Contexto encontrado no codigo: frontend publica `<nome> ligar/desligar`; firmware assina `bomba/controle`; frontend escuta `bomba/estado`, mas firmware nao publica estado de forma clara.
-- Situacao atual: parcialmente implementado.
+- Situacao atual: implementada localmente.
 - Proposta de solucao: manter payload texto por compatibilidade e planejar payload JSON opcional versionado; firmware publica `bomba/estado` com estado, origem e confirmacao.
 - Backend afetado: possivel ingestao futura de eventos de bomba.
 - Frontend afetado: `mqttService`, `useWaterSystem`, feedback de comando.
@@ -628,7 +628,8 @@ Motivo: o app ja exibe os alertas persistidos. O proximo passo mais seguro e est
 - Criterios de aceite: app distingue comando pendente, confirmado e falho; firmware publica estado ao mudar bomba.
 - Plano de testes: comando ligar/desligar, fisico ativo ignora remoto, status pin nao confirma, MQTT desconectado.
 - Arquivos provavelmente afetados: `frontend/src/services/mqttService.ts`, `frontend/src/hooks/useWaterSystem.ts`, `firmware/TCC.ino/TCC_Final/TCC_Final.ino`, `README.md`.
-- Status: PENDENTE.
+- Status: AGUARDANDO VALIDACAO.
+- Resultado da validacao local: firmware mantem compatibilidade com `bomba/controle` texto e adiciona `bomba/controle/v2` JSON; `bomba/estado` publica `pump_on`, `confirmed`, `applied`, `source`, `priority`, `overridden_by`, `command_id` e `reason`. O frontend envia comando v2 por padrao, aguarda confirmacao em vez de fazer UI otimista e mostra quando comando foi sobreposto. A colecao `comandos` passa a receber campos de auditoria para estado solicitado/aplicado e prioridade.
 - Resultado da validacao do usuario: _a preencher_.
 
 ### ATV-016 - Estimar consumo de agua e custo
@@ -638,7 +639,7 @@ Motivo: o app ja exibe os alertas persistidos. O proximo passo mais seguro e est
 - Pendencias relacionadas: volume entre sensores, consumo diario/semanal/mensal, custo em reais.
 - Objetivo: calcular consumo estimado a partir de ciclos validos.
 - Contexto encontrado no codigo: `QuickStats` usa capacidade total mockada; relatorios nao calculam consumo.
-- Situacao atual: nao implementado de forma real.
+- Situacao atual: implementada localmente.
 - Proposta de solucao: configurar `RESERVOIR_VOLUME_BETWEEN_SENSORS_LITERS` e `WATER_PRICE_PER_CUBIC_METER_BRL`, calcular ciclos validos por periodo e converter litros para metros cubicos.
 - Backend afetado: servico de consumo, relatorios, agente.
 - Frontend afetado: dashboard/historico.
@@ -651,7 +652,8 @@ Motivo: o app ja exibe os alertas persistidos. O proximo passo mais seguro e est
 - Criterios de aceite: calculo usa litros -> m3 corretamente; periodos sem dados retornam zero/sem dados; unidade aparece documentada.
 - Plano de testes: 1 ciclo, multiplos ciclos, periodo vazio, preco por m3.
 - Arquivos provavelmente afetados: `backend/app/services/consumption.py`, `backend/.env.example`, `frontend/src/pages/HistoryPage.tsx`, `frontend/src/components/QuickStats.tsx`, `README.md`.
-- Status: PENDENTE.
+- Status: AGUARDANDO VALIDACAO.
+- Resultado da validacao local: criado `consumption.py` com `RESERVOIR_VOLUME_BETWEEN_SENSORS_LITERS` e `WATER_PRICE_PER_CUBIC_METER_BRL`; o resumo usa ciclos validos em `filling_cycles`, converte litros para m3, calcula custo e serie diaria. `GET /reports/summary` inclui `water_consumption` e a tela de historico exibe os dados reais ou estado sem dados.
 - Resultado da validacao do usuario: _a preencher_.
 
 ### ATV-017 - Estimar consumo eletrico da bomba
@@ -661,7 +663,7 @@ Motivo: o app ja exibe os alertas persistidos. O proximo passo mais seguro e est
 - Pendencias relacionadas: potencia da bomba, tempo ligado, custo kWh, relatorios.
 - Objetivo: calcular energia com base no tempo real confirmado de bomba ligada.
 - Contexto encontrado no codigo: `EnergyEstimate` calcula localmente por sessao com 750 W e preco fixo; firmware registra comandos em `comandos`.
-- Situacao atual: parcialmente implementado como mock/local.
+- Situacao atual: implementada localmente.
 - Proposta de solucao: definir `PUMP_POWER_KW` e `ELECTRICITY_PRICE_PER_KWH_BRL`, derivar intervalos ligado/desligado de eventos confirmados, calcular kWh e custo.
 - Backend afetado: servico de energia, relatorios, agente.
 - Frontend afetado: `EnergyEstimate`, historico.
@@ -674,7 +676,8 @@ Motivo: o app ja exibe os alertas persistidos. O proximo passo mais seguro e est
 - Criterios de aceite: energia = potencia kW x horas; custo = kWh x preco; periodos incompletos tratados explicitamente.
 - Plano de testes: liga/desliga normal, ligado antes do periodo, desligado depois do periodo, comando sem confirmacao.
 - Arquivos provavelmente afetados: `backend/app/services/energy.py`, `frontend/src/components/EnergyEstimate.tsx`, `firmware/TCC.ino/TCC_Final/TCC_Final.ino`, `README.md`.
-- Status: PENDENTE.
+- Status: AGUARDANDO VALIDACAO.
+- Resultado da validacao local: criado `energy.py` com `PUMP_POWER_KW` e `ELECTRICITY_PRICE_PER_KWH_BRL`; o calculo usa apenas eventos de `comandos` com `confirmed=true`, `applied=true` e estado aplicado, contabiliza comandos ignorados/sobrepostos separadamente e gera serie diaria. `EnergyEstimate` deixou de somar tempo local por sessao e passou a consultar o backend.
 - Resultado da validacao do usuario: _a preencher_.
 
 ### ATV-018 - Melhorar relatorios PDF e download no historico
@@ -684,7 +687,7 @@ Motivo: o app ja exibe os alertas persistidos. O proximo passo mais seguro e est
 - Pendencias relacionadas: endpoints existentes, PDF visual, historico, mobile.
 - Objetivo: gerar relatorios uteis e permitir download/compartilhamento pela tela de historico.
 - Contexto encontrado no codigo: backend gera PDF simples; frontend tem botao mock; PDFs estao em `backend/generated`.
-- Situacao atual: parcialmente implementado no backend e mockado no frontend.
+- Situacao atual: implementada localmente.
 - Proposta de solucao: melhorar layout PDF com cabecalho, periodo, resumo, tabelas, alertas, consumo de agua/energia e estados sem dados; frontend chama API e baixa arquivo.
 - Backend afetado: `reports.py`, `pdf.py`, services de resumo.
 - Frontend afetado: `HistoryPage`, `aiService` ou novo `reportService`.
@@ -697,7 +700,8 @@ Motivo: o app ja exibe os alertas persistidos. O proximo passo mais seguro e est
 - Criterios de aceite: botao PDF baixa/abre arquivo; PDF identifica periodo e data; periodo sem dados nao quebra.
 - Plano de testes: geracao 7d/30d/90d, sem dados, download navegador, mobile planejado.
 - Arquivos provavelmente afetados: `backend/app/routers/reports.py`, `backend/app/services/pdf.py`, `frontend/src/pages/HistoryPage.tsx`, `frontend/src/services/reportService.ts`.
-- Status: PENDENTE.
+- Status: AGUARDANDO VALIDACAO.
+- Resultado da validacao local: criado `GET /reports/summary`, PDF inclui resumo de sensores, consumo de agua, energia da bomba, alertas recentes e observacoes de premissas. A tela de historico consulta o resumo real, remove dados mockados principais e baixa o PDF via `reportService`.
 - Resultado da validacao do usuario: _a preencher_.
 
 ### ATV-019 - Abstrair provedores LLM do backend
@@ -943,23 +947,34 @@ Motivo: o app ja exibe os alertas persistidos. O proximo passo mais seguro e est
 - `cd frontend && npm run build`: passou com avisos nao bloqueantes de Browserslist/Baseline desatualizados e chunks acima de 500 kB.
 - `git diff --check`: passou.
 
+## Validacoes executadas apos ATV-015, ATV-016, ATV-017 e ATV-018
+
+- `cd backend && source .venv/bin/activate && pytest`: passou com 33 testes.
+- `cd backend && source .venv/bin/activate && python -m compileall app tests`: passou.
+- `cd frontend && npm exec tsc -- --noEmit`: passou.
+- `cd frontend && npm run lint`: passou com 6 avisos nao bloqueantes de `react-refresh/only-export-components`.
+- `cd frontend && npm run build`: passou com avisos nao bloqueantes de Browserslist/Baseline desatualizados e chunks acima de 500 kB.
+- `GET /reports/summary?period=7d` com backend local: retornou `200 OK` com resumo de sensores, consumo de agua, energia da bomba e alertas.
+- `GET /reports/weekly?period=7d` com backend local: retornou `200 application/pdf`.
+- `git diff --check`: passou.
+
 ## Testes nao executados nesta etapa
 
 - Firebase Emulator: nao executado porque ainda falta definir project alias real, Firebase CLI/secrets e estrategia de URL para o backend local/homologacao.
 - Deploy Firebase/backend/mobile: fora de escopo nesta etapa.
 - Cypress E2E e Vitest unitario do frontend: nao executados nesta revalidacao; foram priorizados `tsc`, `lint`, build e pytest dos endpoints backend.
-- Compilacao Arduino: nao ha ambiente Arduino/ESP32 configurado nesta sessao.
+- Compilacao Arduino/ESP32: nao executada nesta sessao; validar o sketch `TCC_Final.ino` no Arduino IDE ou ambiente equivalente antes de gravar.
 
 ## Riscos gerais
 
 - Sem `device_id`/`event_id` gerado no firmware, eventos offline e reprocessamento historico ainda ficam mais frageis que o ideal.
 - Sem validar Firebase Emulator/deploy, o fluxo Firestore -> Function -> backend ainda precisa de prova integrada fora dos testes locais.
 - Sem separar todos os secrets/configuracoes por ambiente, ha risco de expor credenciais e confundir configuracao publica com segredo.
-- Sem estado confirmado da bomba via MQTT, calculo de energia e relatorios de acionamento ainda dependem de premissas incompletas.
+- Sem medir eletricamente a bomba, `confirmed=true` ainda depende do `BOMBA_STATUS_PIN`; se esse pino nao estiver confiavel, energia deve ser tratada como estimativa.
 - Sem confirmar hosting do backend, a Function pode ficar sem URL confiavel para chamada.
 
 ## Proximo passo recomendado
 
-Aguardar revisao e commit do lote `ATV-012`.
+Aguardar revisao e commit do lote `ATV-015`, `ATV-016`, `ATV-017` e `ATV-018`.
 
-Depois disso, iniciar `ATV-015` + `ATV-017`: estado confirmado da bomba e estimativa de energia.
+Depois disso, seguir para `ATV-013` ou `ATV-014`, conforme prioridade entre configuracoes/secrets e buffer offline no ESP32.

@@ -12,6 +12,7 @@ node_modules/
 /backend/venv/
 /backend/.env
 /backend/tcc1-155fa-firebase-admin.json
+/backend/generated/*.pdf
 
 /firmware/TCC.ino/TCC_2_sensores/*
 /firmware/TCC.ino/TCC_2_sensores/

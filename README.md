@@ -91,6 +91,7 @@ Rotas principais:
 - `POST /llm/chat/stream`: chat em streaming.
 - `GET /llm/sessions/{session_id}`: historico de uma sessao.
 - `POST /agent`: agente analitico do AquaMonitor.
+- `GET /reports/summary?period=7d`: resumo JSON com sensores, consumo de agua, energia da bomba e alertas recentes.
 - `GET /reports/weekly?period=7d`: relatorio PDF de 7, 30 ou 90 dias.
 - `GET /reports/monthly`: relatorio PDF mensal.
 - `GET /alerts/sensors`: analise de alertas no periodo.
@@ -141,10 +142,15 @@ CORS_ORIGINS
 GOOGLE_APPLICATION_CREDENTIALS
 FIREBASE_CREDENTIALS_JSON
 FIRESTORE_SENSORS_COLLECTION
+FIRESTORE_COMMANDS_COLLECTION
 FIRESTORE_ALERTS_COLLECTION
 FIRESTORE_SENSOR_EVENT_PROCESSING_COLLECTION
 FIRESTORE_FILLING_CYCLES_COLLECTION
 FIRESTORE_OPERATION_TIMEOUT_SECONDS
+RESERVOIR_VOLUME_BETWEEN_SENSORS_LITERS
+WATER_PRICE_PER_CUBIC_METER_BRL
+PUMP_POWER_KW
+ELECTRICITY_PRICE_PER_KWH_BRL
 SENSOR_DUPLICATE_WINDOW_SECONDS
 SENSOR_OUT_OF_ORDER_TOLERANCE_SECONDS
 MIN_PLAUSIBLE_DRAIN_TIME_SECONDS
@@ -204,9 +210,12 @@ Variavel de ambiente relevante:
 
 ```text
 VITE_AI_BASE_URL=http://127.0.0.1:8000
+VITE_MQTT_PUBLISH_LEGACY_CONTROL=0
 ```
 
 Durante desenvolvimento com Vite, o backend permite por padrao as origens locais `http://localhost:5173`, `http://127.0.0.1:5173`, `http://localhost:5174` e `http://127.0.0.1:5174`, alem das origens Ionic `8100`.
+
+`VITE_MQTT_PUBLISH_LEGACY_CONTROL=1` faz o app publicar tambem o payload texto em `bomba/controle`. Mantenha `0` com o firmware novo, porque ele ja assina `bomba/controle/v2`.
 
 ## Firmware
 
@@ -230,6 +239,7 @@ Topicos MQTT atuais:
 
 ```text
 bomba/controle
+bomba/controle/v2
 bomba/estado
 ```
 
@@ -247,18 +257,52 @@ bomba ligar
 bomba desligar
 ```
 
+O firmware tambem aceita o contrato JSON versionado no topico `bomba/controle/v2`:
+
+```json
+{
+  "schema_version": 1,
+  "command_id": "web-123",
+  "command": "ligar",
+  "desired_on": true,
+  "source": "frontend",
+  "timestamp": "2026-07-28T12:00:00Z"
+}
+```
+
+O estado confirmado da bomba e publicado em `bomba/estado`:
+
+```json
+{
+  "schema_version": 1,
+  "pump_on": true,
+  "mode": "remoto",
+  "confirmed": true,
+  "applied": true,
+  "source": "remoto",
+  "priority": "remoto",
+  "overridden_by": "",
+  "command_id": "web-123",
+  "reason": "mqtt ligar",
+  "timestamp": "2026-07-28T12:00:01Z"
+}
+```
+
 ## Firebase e MQTT
 
 Uso atual:
 
 - Firestore `sensores`: eventos dos sensores com `sensor`, `estado` e `timestamp`.
-- Firestore `comandos`: comandos/acionamentos da bomba.
+- Firestore `comandos`: comandos/acionamentos da bomba com estado solicitado, estado aplicado, confirmacao, prioridade e sobreposicao.
 - Firestore `chat_sessions`: sessoes e mensagens do chat no backend.
 - Firestore `sensor_event_processing`: controle tecnico de processamento idempotente por evento.
 - Firestore `alerts`: alertas padronizados com `event_id`, `type`, `severity`, `status`, causas possiveis e metadados.
 - Firestore `filling_cycles`: ciclos validos `baixo subiu -> alto subiu` com `fill_time_seconds`.
-- MQTT `bomba/controle`: comandos enviados pelo app.
+- MQTT `bomba/controle`: comandos texto legados.
+- MQTT `bomba/controle/v2`: comandos JSON versionados enviados pelo app.
 - MQTT `bomba/estado`: status lido pelo app quando publicado.
+
+Na colecao `comandos`, os campos `requested_state`, `applied_state`, `applied`, `confirmed`, `state_changed`, `source`, `priority`, `overridden_by`, `command_id` e `reason` distinguem comando solicitado de estado realmente aplicado. O calculo de energia considera apenas eventos aplicados e confirmados; comandos sobrepostos por prioridade fisica/remota/automatica ficam auditados, mas nao entram como tempo ligado.
 
 O webhook `POST /alerts/sensor-event` aceita o payload legado do firmware e o payload enriquecido da Function:
 
@@ -405,10 +449,10 @@ Para firmware, validar no Arduino IDE ou ambiente equivalente com placa ESP32 e 
 
 ## Estado atual conhecido
 
-- A tela de historico ainda possui dados mockados.
 - O frontend ja escuta Firestore para ultimo evento de sensor.
 - O frontend exibe alertas inteligentes persistidos pelo backend e permite reconhecer alertas abertos.
-- O controle da bomba usa MQTT diretamente do frontend.
-- O backend le Firestore para relatorios, alertas e agente IA.
+- O controle da bomba usa MQTT diretamente do frontend e aguarda confirmacao em `bomba/estado`.
+- A tela de historico consulta `/reports/summary` e baixa PDF real pelo backend.
+- O backend le Firestore para relatorios, consumo, energia, alertas e agente IA.
 - O backend persiste alertas padronizados e ciclos de enchimento validos.
 - A Firebase Function de alertas esta estruturada em `functions/src/index.ts`, com build/test locais. Emulator e deploy ainda precisam de projeto Firebase, Firebase CLI e secrets configurados.

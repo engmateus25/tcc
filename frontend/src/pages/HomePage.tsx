@@ -21,6 +21,8 @@ export function HomePage() {
     isPumpOn,
     pumpMode,
     lastSensor,
+    pendingPumpCommand,
+    pumpStatusMessage,
     togglePump,
   } = useWaterSystem();
 
@@ -73,7 +75,12 @@ export function HomePage() {
 
         {/* Grid 2 colunas para Controle e Modo */}
         <div className="grid grid-cols-2 gap-4">
-          <PumpControl isOn={isPumpOn} onToggle={togglePump} />
+          <PumpControl
+            isOn={isPumpOn}
+            onToggle={togglePump}
+            isPending={Boolean(pendingPumpCommand)}
+            statusMessage={pumpStatusMessage}
+          />
           <PumpModeDisplay mode={pumpMode} />
         </div>
 
