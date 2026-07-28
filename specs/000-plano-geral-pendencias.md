@@ -32,7 +32,7 @@ Arquivos sensiveis existentes foram avaliados apenas quanto a presenca e nomes d
 
 Estas referencias foram consultadas apenas para planejar tecnologia atualizavel:
 
-- Firebase Firestore triggers: https://firebase.google.com/docs/functions/firestore-events
+- Firebase Firestore triggers v2: https://firebase.google.com/docs/firestore/extend-with-functions-2nd-gen
 - Firebase Functions runtime/Node.js: https://firebase.google.com/docs/functions/manage-functions
 - Firebase Functions ambiente e secrets: https://firebase.google.com/docs/functions/config-env
 - Google Cloud runtime support para Node.js: https://docs.cloud.google.com/functions/docs/runtime-support
@@ -127,12 +127,16 @@ Validacao apos ATV-001:
 
 ### Firebase Functions
 
-- Nao existe pasta `functions/`, `firebase.json`, `.firebaserc` ou `firestore.rules` na raiz.
-- O unico codigo parecido com Function esta em `frontend/src/services/alerts.ts`.
-- Esse codigo usa trigger `onDocumentCreated("sensores/{docId}")`, mas nao trata autenticacao, secrets, timeout, retentativa, idempotencia, duplicidade ou logs estruturados.
+- `functions/` agora existe como projeto Firebase Functions v2 em TypeScript.
+- `firebase.json` define `functions` como source, runtime `nodejs22`, predeploy de build e portas basicas de emuladores.
+- `.firebaserc.example` foi criado apenas como modelo; `.firebaserc` real ainda depende do project id/alias Firebase aprovado pelo usuario.
+- `functions/src/index.ts` exporta `onSensorCreated` com trigger `onDocumentCreated` em `sensores/{docId}`, retry habilitado, timeout curto, logs estruturados e chamada ao backend.
+- `functions/src/payload.ts` concentra a conversao do documento Firestore para o payload enriquecido do contrato `ATV-002`.
+- `functions/src/config.ts` centraliza parametros/secrets, incluindo `BACKEND_SENSOR_EVENT_URL`, `SENSOR_EVENT_WEBHOOK_SECRET` e `FUNCTION_REGION`.
 - Pela documentacao atual, Firestore triggers `onDocumentCreated` existem em Cloud Functions for Firebase v2.
-- Para Firebase Functions em 2026-07-27, Node.js 22 e a escolha conservadora para Firebase; Node.js 20 ja aparece em janela de depreciacao no calendario de runtime. Node.js 24 aparece em Cloud Run functions, mas deve ser confirmado para suporte pelo fluxo Firebase CLI antes da implementacao.
-- O npm mostra uma versao `latest` candidata/release candidate recente para `firebase-functions`; para TCC e estabilidade, o plano deve escolher uma versao estavel explicita depois da aprovacao, nao uma RC automaticamente.
+- Para Firebase Functions em 2026-07-27, Node.js 22 e a escolha conservadora para Firebase; Node.js 20 ja aparece em janela de depreciacao no calendario de runtime.
+- Foi escolhida uma versao estavel explicita de `firebase-functions` (`7.3.0`) em vez de uma RC publicada como candidata mais recente no npm.
+- Build e testes locais passam; Firebase Emulator e deploy ainda nao foram executados porque dependem de Firebase CLI/projeto/secrets.
 
 ### IA
 
@@ -154,7 +158,7 @@ Validacao apos ATV-001:
 - Estimativa de agua existe apenas como mock em `QuickStats`, com capacidade hardcoded.
 - Capacitor esta instalado e configurado, mas plataformas Android/iOS nao existem no projeto.
 
-## Inconsistencias encontradas
+## Inconsistencias encontradas na auditoria inicial
 
 - Server-side Firebase Function dentro de `frontend/src/services/alerts.ts`.
 - `SensorEventIn` duplicado em `backend/app/schemas/dto.py`.
@@ -174,20 +178,19 @@ Validacao apos ATV-001:
 
 ## Ordem tecnica recomendada
 
-Atualizacao apos commit de `ATV-001`, `ATV-002`, `ATV-004` e `ATV-007`:
+Atualizacao apos implementacao local de `ATV-003`, `ATV-005` e `ATV-006`:
 
-1. `ATV-003` + `ATV-005` + `ATV-006`: fortalecer testes do backend e concluir a estrutura Firebase Functions com trigger real de `sensores/{docId}`.
-2. `ATV-008` + `ATV-011`: implementar regras deterministicas e, na mesma sequencia, padronizar a persistencia/consulta dos alertas gerados por essas regras.
-3. `ATV-009` + `ATV-010`: extrair ciclos de enchimento validos e aplicar AutoCloud sobre `fill_time_seconds`.
-4. `ATV-015` + `ATV-017`: definir estado confirmado da bomba via MQTT e usar esse contrato para estimar energia.
-5. `ATV-014`: adicionar buffer offline no firmware usando `event_id`/idempotencia ja disponiveis.
-6. `ATV-016`: calcular consumo de agua a partir dos ciclos validos.
-7. `ATV-018`: melhorar relatorios e download no historico, ja podendo incluir alertas, ciclos, agua e energia se as atividades anteriores estiverem concluidas.
-8. `ATV-012`: exibir alertas no aplicativo usando o modelo persistente de `ATV-011`.
-9. `ATV-013`: organizar configuracoes e secrets por ambiente antes de mobile/deploy real.
-10. `ATV-019` + `ATV-020` + `ATV-021` + `ATV-022`: refatorar provedores LLM, integrar Gemini/modelo Ollama aprovado e melhorar prompt/sessoes.
-11. `ATV-023`: refinar interface quando dados reais de alertas, bomba, consumo e relatorios estiverem disponiveis.
-12. `ATV-024`: configurar Android depois de ambiente, relatorios e URLs estarem estabilizados.
+1. `ATV-008` + `ATV-011`: implementar regras deterministicas e, na mesma sequencia, padronizar a persistencia/consulta dos alertas gerados por essas regras.
+2. `ATV-009` + `ATV-010`: extrair ciclos de enchimento validos e aplicar AutoCloud sobre `fill_time_seconds`.
+3. `ATV-015` + `ATV-017`: definir estado confirmado da bomba via MQTT e usar esse contrato para estimar energia.
+4. `ATV-014`: adicionar buffer offline no firmware usando `event_id`/idempotencia ja disponiveis.
+5. `ATV-016`: calcular consumo de agua a partir dos ciclos validos.
+6. `ATV-018`: melhorar relatorios e download no historico, ja podendo incluir alertas, ciclos, agua e energia se as atividades anteriores estiverem concluidas.
+7. `ATV-012`: exibir alertas no aplicativo usando o modelo persistente de `ATV-011`.
+8. `ATV-013`: organizar configuracoes e secrets por ambiente antes de mobile/deploy real.
+9. `ATV-019` + `ATV-020` + `ATV-021` + `ATV-022`: refatorar provedores LLM, integrar Gemini/modelo Ollama aprovado e melhorar prompt/sessoes.
+10. `ATV-023`: refinar interface quando dados reais de alertas, bomba, consumo e relatorios estiverem disponiveis.
+11. `ATV-024`: configurar Android depois de ambiente, relatorios e URLs estarem estabilizados.
 
 Justificativa: a baseline, o contrato de sensores, a autenticacao do webhook e a idempotencia ja foram implementados e commitados. As proximas atividades foram reordenadas para evitar dependencias ainda ausentes e reduzir retrabalho entre backend, Functions, firmware e frontend.
 
@@ -195,21 +198,21 @@ Justificativa: a baseline, o contrato de sensores, a autenticacao do webhook e a
 
 Grupos recomendados a partir do estado atual:
 
-- Grupo A: `ATV-003`, `ATV-005`, `ATV-006`. Dependencias atendidas: `ATV-002`, `ATV-004` e `ATV-007` ja foram implementadas. Observacao: `ATV-006` depende da estrutura de `ATV-005`, mas pode ser entregue no mesmo lote em ordem sequencial.
-- Grupo B: `ATV-008`, `ATV-011`. Dependencias atendidas: `ATV-007`. Observacao: `ATV-011` pode padronizar diretamente os alertas criados pelas novas regras deterministicas.
-- Grupo C: `ATV-009`, `ATV-010`. Dependencia anterior: concluir `ATV-008`. Observacao: devem compartilhar fixtures de ciclos e datasets temporais.
-- Grupo D: `ATV-015`, `ATV-017`. Dependencias atendidas: nenhuma pendencia bloqueante. Observacao: energia depende de estado confirmado da bomba, entao `ATV-015` vem primeiro no mesmo lote.
-- Grupo E: `ATV-014`. Dependencias atendidas: `ATV-002` e `ATV-007`. Observacao: pode ser feito isoladamente porque altera firmware e politica de buffer.
-- Grupo F: `ATV-016`, `ATV-018`. Dependencias anteriores: `ATV-009`, e idealmente `ATV-017` para relatorios completos. Observacao: consumo de agua alimenta relatorios; download pode entrar no mesmo lote se os dados estiverem prontos.
-- Grupo G: `ATV-019`, `ATV-020`, `ATV-021`, `ATV-022`. Dependencia anterior: decisao do usuario sobre Gemini/modelo local antes de `ATV-020`/`ATV-021`. Observacao: `ATV-019` deve abrir esse lote.
-- Grupo H: `ATV-012`, `ATV-023`. Dependencias anteriores: `ATV-011` para alertas reais e, para refinamento amplo da UI, `ATV-015`, `ATV-016`, `ATV-017` e `ATV-018`.
-- Grupo I: `ATV-013`, `ATV-024`. Dependencia anterior para Android: `ATV-013` e URL/HTTPS definidos. Observacao: configuracao por ambiente deve vir antes de validar mobile.
+- Grupo concluido localmente: `ATV-003`, `ATV-005`, `ATV-006`. Observacao: aguardam validacao/commit do usuario; emulador Firebase segue como validacao pendente.
+- Grupo A: `ATV-008`, `ATV-011`. Dependencias atendidas: `ATV-007`. Observacao: `ATV-011` pode padronizar diretamente os alertas criados pelas novas regras deterministicas.
+- Grupo B: `ATV-009`, `ATV-010`. Dependencia anterior: concluir `ATV-008`. Observacao: devem compartilhar fixtures de ciclos e datasets temporais.
+- Grupo C: `ATV-015`, `ATV-017`. Dependencias atendidas: nenhuma pendencia bloqueante. Observacao: energia depende de estado confirmado da bomba, entao `ATV-015` vem primeiro no mesmo lote.
+- Grupo D: `ATV-014`. Dependencias atendidas: `ATV-002` e `ATV-007`. Observacao: pode ser feito isoladamente porque altera firmware e politica de buffer.
+- Grupo E: `ATV-016`, `ATV-018`. Dependencias anteriores: `ATV-009`, e idealmente `ATV-017` para relatorios completos. Observacao: consumo de agua alimenta relatorios; download pode entrar no mesmo lote se os dados estiverem prontos.
+- Grupo F: `ATV-019`, `ATV-020`, `ATV-021`, `ATV-022`. Dependencia anterior: decisao do usuario sobre Gemini/modelo local antes de `ATV-020`/`ATV-021`. Observacao: `ATV-019` deve abrir esse lote.
+- Grupo G: `ATV-012`, `ATV-023`. Dependencias anteriores: `ATV-011` para alertas reais e, para refinamento amplo da UI, `ATV-015`, `ATV-016`, `ATV-017` e `ATV-018`.
+- Grupo H: `ATV-013`, `ATV-024`. Dependencia anterior para Android: `ATV-013` e URL/HTTPS definidos. Observacao: configuracao por ambiente deve vir antes de validar mobile.
 
-## Primeira atividade implementavel apos aprovacao
+## Proxima atividade implementavel apos aprovacao
 
-Primeiro grupo recomendado agora: `ATV-003`, `ATV-005` e `ATV-006`.
+Primeiro grupo recomendado agora: `ATV-008` e `ATV-011`.
 
-Motivo: o contrato de eventos, a autenticacao do webhook e a idempotencia ja foram commitados. O proximo passo mais seguro e concluir a estrutura Firebase Functions e o trigger real, com uma base minima de testes backend para proteger o contrato `/alerts/sensor-event`.
+Motivo: o contrato de eventos, a autenticacao do webhook, a idempotencia, o harness pytest e a estrutura Functions ja estao implementados localmente. O proximo passo mais seguro e transformar essas bases em regras deterministicas de alerta e persistir/consultar os alertas em modelo padronizado.
 
 ## Backlog tecnico
 
@@ -280,9 +283,9 @@ Motivo: o contrato de eventos, a autenticacao do webhook e a idempotencia ja for
 - Titulo: Criar harness pytest para backend.
 - Pendencias relacionadas: testes de endpoints, alertas, anomalias, idempotencia, AutoCloud.
 - Objetivo: permitir testes automatizados do backend antes de alterar regras de negocio.
-- Contexto encontrado no codigo: `requirements.txt` nao possui `pytest`; backend depende de Firestore real em servicos; nao ha pasta `tests/`.
-- Situacao atual: nao implementado.
-- Proposta de solucao: adicionar `pytest`, `pytest-asyncio` se necessario, fixtures para `TestClient`, mocks de Firestore e testes unitarios dos servicos puros.
+- Contexto encontrado no codigo: apos `ATV-002`, `ATV-004` e `ATV-007` ja existiam testes de contrato em `backend/tests/test_sensor_event_webhook.py`, mas ainda faltavam `pytest`, configuracao propria de descoberta e execucao padronizada no Linux.
+- Situacao atual: implementada localmente com `pytest`.
+- Proposta de solucao: adicionar `pytest`, `pytest.ini`, adaptar os testes de contrato para fixtures pytest e manter mocks locais de processamento/Firestore.
 - Backend afetado: `requirements.txt`, `tests/`, possivel ajuste de inicializacao.
 - Frontend afetado: nenhum.
 - Firmware afetado: nenhum.
@@ -290,11 +293,12 @@ Motivo: o contrato de eventos, a autenticacao do webhook e a idempotencia ja for
 - Contratos e payloads envolvidos: `POST /alerts/sensor-event`, retorno de alertas, schemas de evento.
 - Dependencias: `ATV-002` para contrato final.
 - Riscos: se os servicos continuarem acoplados ao Firebase Admin, os testes ficarao frageis.
-- Perguntas pendentes: posso adicionar dependencias de teste ao `requirements.txt` principal ou prefere `requirements-dev.txt`?
+- Perguntas pendentes: em etapa futura, vale separar dependencias de desenvolvimento em `requirements-dev.txt` se a lista de ferramentas de teste crescer.
 - Criterios de aceite: `pytest` executa localmente sem credenciais reais; pelo menos testes de schema e endpoint com Firestore mockado.
-- Plano de testes: `pytest`; testes de sucesso, payload invalido, duplicidade, timestamp ausente.
-- Arquivos provavelmente afetados: `backend/requirements.txt`, `backend/tests/*`, `backend/app/services/*`.
-- Status: PENDENTE.
+- Plano de testes: `pytest`; testes de sucesso, payload invalido, segredo ausente/incorreto, payload legado, identidade do evento e duplicidade.
+- Arquivos provavelmente afetados: `backend/requirements.txt`, `backend/pytest.ini`, `backend/tests/test_sensor_event_webhook.py`.
+- Status: AGUARDANDO VALIDACAO.
+- Resultado da validacao local: `pytest` passou com 8 testes sem credenciais reais. Os testes chamam schema, servico e router diretamente com mocks; `TestClient`/ASGI ficou como risco tecnico porque travou localmente mesmo em rota simples durante a investigacao.
 - Resultado da validacao do usuario: _a preencher_.
 
 ### ATV-004 - Ajustar endpoint `/alerts/sensor-event` e autenticacao Function -> FastAPI
@@ -332,7 +336,7 @@ Motivo: o contrato de eventos, a autenticacao do webhook e a idempotencia ja for
 - Plano de testes: TestClient com payload valido, invalido, sem header, header incorreto, duplicado.
 - Arquivos provavelmente afetados: `backend/app/routers/alerts.py`, `backend/app/routers/webhook_sensor.py`, `backend/app/schemas/dto.py`, `backend/app/services/sensor_realtime.py`, `backend/.env.example`.
 - Status: CONCLUIDO.
-- Resultado da validacao local: endpoint exige `X-AquaMonitor-Webhook-Secret` quando `SENSOR_EVENT_WEBHOOK_SECRET` esta configurado, rejeita segredo ausente/incorreto, aceita payload valido e retorna `processed`, `duplicate`, `event_id`, `alerts_created`, `cycle_created` e `autocloud`. O rascunho em `functions/src/index.js` envia o payload enriquecido e o header quando configurado.
+- Resultado da validacao local: endpoint exige `X-AquaMonitor-Webhook-Secret` quando `SENSOR_EVENT_WEBHOOK_SECRET` esta configurado, rejeita segredo ausente/incorreto, aceita payload valido e retorna `processed`, `duplicate`, `event_id`, `alerts_created`, `cycle_created` e `autocloud`. A Function em `functions/src/index.ts` envia o payload enriquecido e o header quando configurado.
 - Resultado da validacao do usuario: validado pelo usuario e commitado junto com `ATV-002` e `ATV-007`.
 
 ### ATV-005 - Criar estrutura server-side `functions/`
@@ -341,22 +345,22 @@ Motivo: o contrato de eventos, a autenticacao do webhook e a idempotencia ja for
 - Titulo: Criar estrutura Firebase Functions.
 - Pendencias relacionadas: Firebase Functions, `frontend/src/services/alerts.ts`, secrets, emulador, ambientes.
 - Objetivo: mover a responsabilidade server-side para uma pasta propria e fora do bundle frontend.
-- Contexto encontrado no codigo: existe apenas `functions/src/index.js`; ainda nao ha `functions/package.json`, `tsconfig`, `firebase.json`, `.firebaserc` ou scripts de build/test.
-- Situacao atual: parcialmente adiantada por um rascunho em `functions/src/index.js`, mas ainda sem estrutura Firebase Functions completa.
-- Proposta de solucao: criar `functions/` em TypeScript, com `package.json`, `src/index.ts`, `tsconfig.json`, `.env.example` sem secrets, scripts de build/test e `firebase.json`.
+- Contexto encontrado no codigo: existia apenas `functions/src/index.js` como rascunho JS; ainda nao havia pacote Firebase Functions instalavel/testavel.
+- Situacao atual: implementada localmente como projeto Firebase Functions v2 em TypeScript.
+- Proposta de solucao: criar `functions/` em TypeScript, com `package.json`, `package-lock.json`, `src/index.ts`, `src/config.ts`, `src/payload.ts`, `test/`, `tsconfig.json`, `.env.example` sem secrets, scripts de build/test, `firebase.json` e `.firebaserc.example`.
 - Backend afetado: apenas URL/contrato consumido.
-- Frontend afetado: remocao/reorganizacao de `frontend/src/services/alerts.ts`.
+- Frontend afetado: nenhum nesta atividade atual; o codigo server-side ja havia sido retirado do bundle frontend na baseline.
 - Firmware afetado: nenhum.
 - Firebase ou servicos externos afetados: Cloud Functions, Emulator Suite.
 - Contratos e payloads envolvidos: trigger `sensores/{docId}` e chamada HTTP para backend.
 - Dependencias: aprovacao para criar `functions/` e escolher versoes.
 - Riscos: projeto Firebase pode exigir plano Blaze para deploy; emulador pode demandar Firebase CLI local.
-- Perguntas pendentes: qual project alias usar em `.firebaserc`? Devemos versionar `.firebaserc` com project id real ou manter exemplo?
+- Perguntas pendentes: qual project alias usar em `.firebaserc` real? Por seguranca, a atividade criou apenas `.firebaserc.example`.
 - Criterios de aceite: `functions` compila localmente; frontend nao inclui codigo de Functions; scripts documentados.
 - Plano de testes: `npm --prefix functions run build`; teste unitario do conversor de payload; emulador planejado.
-- Arquivos provavelmente afetados: `functions/package.json`, `functions/src/index.ts`, `functions/tsconfig.json`, `firebase.json`, `.firebaserc`, `.gitignore`, `README.md`, `frontend/src/services/alerts.ts`.
-- Status: PENDENTE.
-- Resultado da validacao local: ainda nao aplicavel. Existe apenas `functions/src/index.js`; faltam `functions/package.json`, `functions/tsconfig.json`, scripts de build/test, `.env.example`, `firebase.json` e decisao sobre `.firebaserc`.
+- Arquivos provavelmente afetados: `functions/package.json`, `functions/package-lock.json`, `functions/src/index.ts`, `functions/src/config.ts`, `functions/src/payload.ts`, `functions/test/*`, `functions/tsconfig.json`, `firebase.json`, `.firebaserc.example`, `.gitignore`, `README.md`.
+- Status: AGUARDANDO VALIDACAO.
+- Resultado da validacao local: `npm install`, `npm run build` e `npm test` passaram. O ambiente Linux oficial foi atualizado para Node.js 22.23.1 e npm 10.9.8; com essa versao, `npm install` em `functions/` passou sem avisos de engine.
 - Resultado da validacao do usuario: _a preencher_.
 
 ### ATV-006 - Implementar trigger Firestore `onDocumentCreated`
@@ -365,9 +369,9 @@ Motivo: o contrato de eventos, a autenticacao do webhook e a idempotencia ja for
 - Titulo: Implementar Function de novo evento em `sensores`.
 - Pendencias relacionadas: fluxo ESP32 -> Firestore -> Function -> Backend.
 - Objetivo: chamar automaticamente o backend quando novo documento entrar em `sensores`.
-- Contexto encontrado no codigo: `functions/src/index.js` ja esboca `onDocumentCreated`, envia payload enriquecido e header secreto opcional, mas ainda nao esta dentro de uma estrutura Firebase Functions instalavel/testavel.
-- Situacao atual: parcialmente implementada como rascunho JS, sem configuracao Firebase CLI, build, emulator ou testes proprios.
-- Proposta de solucao: usar `onDocumentCreated` v2 em `sensores/{docId}`, converter `Timestamp` corretamente, incluir `docId`, enviar para `BACKEND_SENSOR_EVENT_URL` por parametro/secret, timeout curto, logs estruturados e erro controlado.
+- Contexto encontrado no codigo: o rascunho JS foi preservado apenas para rastreabilidade, e a implementacao efetiva passou para `functions/src/index.ts`.
+- Situacao atual: implementada localmente com trigger v2 testavel por build/unit tests.
+- Proposta de solucao: usar `onDocumentCreated` v2 em `sensores/{docId}`, converter `Timestamp` corretamente, incluir `docId`, enviar para `BACKEND_SENSOR_EVENT_URL` por parametro/secret, timeout curto, retry, logs estruturados e erro controlado.
 - Backend afetado: endpoint de recepcao.
 - Frontend afetado: nenhum direto.
 - Firmware afetado: nenhum direto.
@@ -376,10 +380,11 @@ Motivo: o contrato de eventos, a autenticacao do webhook e a idempotencia ja for
 - Dependencias: `ATV-004`, `ATV-005`.
 - Riscos: retentativas podem duplicar processamento se idempotencia nao existir; URL local precisa estrategia de desenvolvimento.
 - Perguntas pendentes: ambiente local usara Firebase Emulator chamando backend local em `host.docker.internal`, ngrok/tunnel ou URL de homologacao?
-- Criterios de aceite: criar documento no emulador dispara chamada; falha do backend gera log claro; chamada inclui idempotency key.
-- Plano de testes: emulador com evento baixo, alto, backend indisponivel, timeout, duas execucoes do mesmo doc.
+- Criterios de aceite: criar documento no emulador dispara chamada; falha do backend gera log claro; chamada inclui chave idempotente.
+- Plano de testes: build TypeScript; teste unitario do payload; emulador com evento baixo, alto, backend indisponivel, timeout e duas execucoes do mesmo doc.
 - Arquivos provavelmente afetados: `functions/src/index.ts`, `functions/src/config.ts`, `functions/test/*`, `backend/.env.example`, `README.md`.
-- Status: PENDENTE.
+- Status: AGUARDANDO VALIDACAO.
+- Resultado da validacao local: `npm run build` e `npm test` passaram. A Function monta payload com `document_id`, `event_id`, `raw_path`, `source`, `received_at`, timestamp normalizado e header secreto opcional. Firebase Emulator/deploy nao foram executados nesta etapa por dependerem de Firebase CLI, project alias real e configuracao de secrets.
 - Resultado da validacao do usuario: _a preencher_.
 
 ### ATV-007 - Persistir processamento e garantir idempotencia
@@ -895,7 +900,7 @@ Motivo: o contrato de eventos, a autenticacao do webhook e a idempotencia ja for
 14. A maquina que rodara Ollama tem GPU ou apenas CPU?
 15. Qual package id Android definitivo substitui `io.ionic.starter`?
 
-## Validacoes executadas nesta auditoria
+## Validacoes executadas nesta auditoria inicial
 
 - `git status --short`: worktree ja estava sujo antes deste plano.
 - `rg --files`: mapeamento de arquivos.
@@ -904,14 +909,26 @@ Motivo: o contrato de eventos, a autenticacao do webhook e a idempotencia ja for
 - Import do backend com `.venv` local: nao executou no Windows atual porque a `.venv` tem estrutura `bin/` e o executavel falhou com acesso negado.
 - Verificacao de existencia: nao existem `functions/`, `firebase.json`, `.firebaserc`, `firestore.rules`, `frontend/android` ou `frontend/ios`.
 
+## Validacoes executadas apos ATV-003, ATV-005 e ATV-006
+
+- `node -v`: passou com `v22.23.1`.
+- `npm -v`: passou com `10.9.8`.
+- `cd backend && source .venv/bin/activate && pytest`: passou com 8 testes.
+- `cd backend && source .venv/bin/activate && python -m compileall app tests`: passou.
+- `cd functions && npm install`: passou sem avisos de engine.
+- `cd functions && npm run build`: passou.
+- `cd functions && npm test`: passou.
+- `cd frontend && npm exec tsc -- --noEmit`: passou.
+- `cd frontend && npm run lint`: passou com 6 avisos nao bloqueantes de `react-refresh/only-export-components`.
+- `cd frontend && npm run build`: passou com avisos nao bloqueantes de Browserslist/Baseline desatualizados e chunks acima de 500 kB.
+- `git diff --check`: passou.
+
 ## Testes nao executados nesta etapa
 
-- `npm run build`: evitado para nao gerar artefatos `dist` nesta etapa de planejamento.
-- `npm run lint`: adiado porque `tsc --noEmit` ja aponta bloqueios estruturais.
-- `pytest`: nao existe harness de testes backend.
-- Firebase Emulator: nao existe estrutura `functions/`.
+- Firebase Emulator: nao executado porque ainda falta definir project alias real, Firebase CLI/secrets e estrategia de URL para o backend local/homologacao.
+- Deploy Firebase/backend/mobile: fora de escopo nesta etapa.
+- Cypress E2E e Vitest unitario do frontend: nao executados nesta revalidacao de ambiente; foram priorizados `tsc`, `lint` e `build`.
 - Compilacao Arduino: nao ha ambiente Arduino/ESP32 configurado nesta sessao.
-- Deploy Firebase/backend/mobile: fora de escopo e proibido nesta etapa.
 
 ## Riscos gerais
 
@@ -924,6 +941,6 @@ Motivo: o contrato de eventos, a autenticacao do webhook e a idempotencia ja for
 
 ## Proximo passo recomendado
 
-Aguardar revisao e aprovacao deste planejamento.
+Aguardar revisao e commit do lote `ATV-003`, `ATV-005` e `ATV-006`.
 
-Depois da aprovacao e ja no ambiente Linux oficial, iniciar por uma validacao curta do baseline descrita em "Observacao sobre ambiente de desenvolvimento". Em seguida, iniciar `ATV-001` ou, se a prioridade absoluta for Firebase Functions, `ATV-002` com escopo reduzido e teste de contrato.
+Depois disso, iniciar `ATV-008` + `ATV-011`: regras deterministicas de alerta e modelo padronizado de persistencia/consulta dos alertas.

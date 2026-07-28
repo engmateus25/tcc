@@ -4,17 +4,18 @@ AquaMonitor e um sistema de monitoramento e controle de reservatorio de agua par
 
 ## Visao geral
 
-O sistema esta dividido em tres dominios principais:
+O sistema esta dividido em quatro dominios principais:
 
 - `backend/`: API, agentes de IA, relatorios, alertas e integracao server-side com Firestore.
 - `frontend/`: aplicacao Ionic React para visualizacao, controle da bomba, historico e assistente IA.
 - `firmware/`: codigo do ESP32 responsavel por sensores, bomba, MQTT e envio de eventos ao Firestore.
-- `functions/`: rascunho server-side para futura Cloud Function acionada por eventos Firestore.
+- `functions/`: Firebase Functions v2 em TypeScript para acionar o backend a partir de eventos Firestore.
 
 Fluxo principal:
 
 ```text
 ESP32 -> Firestore REST -> colecao sensores
+Firestore sensores -> Firebase Function -> Backend /alerts/sensor-event
 ESP32 <- MQTT bomba/controle <- Frontend
 Frontend -> Firestore client SDK -> dados em tempo real
 Frontend -> FastAPI -> agente IA, chat, relatorios e alertas
@@ -25,8 +26,11 @@ Backend -> Firebase Admin -> leitura de eventos, sessoes e alertas
 
 ```text
 .
+|-- .node-version
+|-- .nvmrc
 |-- AGENTS.md
 |-- README.md
+|-- firebase.json
 |-- backend/
 |   |-- app/
 |   |   |-- main.py
@@ -37,7 +41,13 @@ Backend -> Firebase Admin -> leitura de eventos, sessoes e alertas
 |   |-- generated/
 |   `-- requirements.txt
 |-- functions/
-|   `-- src/
+|   |-- src/
+|   |   |-- config.ts
+|   |   |-- index.ts
+|   |   `-- payload.ts
+|   |-- test/
+|   |-- package.json
+|   `-- tsconfig.json
 |-- firmware/
 |   `-- TCC.ino/
 |       |-- TCC_Final/
@@ -53,6 +63,12 @@ Backend -> Firebase Admin -> leitura de eventos, sessoes e alertas
     |-- package.json
     `-- vite.config.ts
 ```
+
+## Ambiente Node.js
+
+Use Node.js 22 para o frontend e para `functions/`. O ambiente Linux oficial foi validado com Node.js `v22.23.1` e npm `10.9.8`.
+
+Os arquivos `.nvmrc` e `.node-version` deixam a versao major `22` explicita para ferramentas de gerenciamento de Node.
 
 ## Backend
 
@@ -102,6 +118,17 @@ Por padrao, a API fica em:
 ```text
 http://127.0.0.1:8000/docs
 ```
+
+### Rodar testes do backend
+
+```bash
+cd backend
+source .venv/bin/activate
+pytest
+python -m compileall app tests
+```
+
+Os testes atuais cobrem contrato de schema, autenticacao do webhook e idempotencia com mocks locais. Eles nao exigem credenciais reais do Firestore.
 
 ### Variaveis de ambiente do backend
 
@@ -235,7 +262,31 @@ O webhook `POST /alerts/sensor-event` aceita o payload legado do firmware e o pa
 
 Quando `SENSOR_EVENT_WEBHOOK_SECRET` estiver definido no backend, a chamada deve enviar o header `X-AquaMonitor-Webhook-Secret`. O backend usa `event_id`, `raw_path` ou `document_id` como chave idempotente e registra o processamento em `sensor_event_processing`.
 
-Ha tambem um rascunho server-side de Cloud Function em `functions/src/index.js` para disparar esse webhook quando um documento novo entra em `sensores`. Essa pasta ainda nao esta pronta para deploy; a configuracao completa de Firebase Functions, emulator e secrets sera definida nas proximas atividades.
+## Firebase Functions
+
+A pasta `functions/` contem a Function `onSensorCreated`, implementada com Firebase Functions v2 em TypeScript. Ela escuta `sensores/{docId}`, converte o documento Firestore para o contrato enriquecido de evento de sensor e chama `POST /alerts/sensor-event`.
+
+Runtime e configuracao local:
+
+```bash
+cd functions
+node -v
+npm install
+npm run build
+npm test
+```
+
+Variaveis usadas pela Function:
+
+```text
+BACKEND_SENSOR_EVENT_URL
+SENSOR_EVENT_WEBHOOK_SECRET
+FUNCTION_REGION
+```
+
+`firebase.json` define a origem `functions/`, runtime Node.js 22 e portas dos emuladores. `.firebaserc.example` serve apenas como modelo; o projeto Firebase real deve ser configurado localmente ou em ambiente seguro. `functions/.env` e secrets reais nao devem ser versionados.
+
+O build e os testes locais validam a estrutura e a conversao de payload. A execucao com Firebase Emulator e o deploy ainda dependem de Firebase CLI, projeto real/alias e configuracao de secrets.
 
 ## Cuidados de seguranca
 
@@ -317,8 +368,15 @@ npm run lint
 
 ```bash
 cd backend
-python -m compileall app
-uvicorn app.main:app --reload
+source .venv/bin/activate
+pytest
+python -m compileall app tests
+```
+
+```bash
+cd functions
+npm run build
+npm test
 ```
 
 Para firmware, validar no Arduino IDE ou ambiente equivalente com placa ESP32 e bibliotecas necessarias instaladas.
@@ -329,4 +387,4 @@ Para firmware, validar no Arduino IDE ou ambiente equivalente com placa ESP32 e 
 - O frontend ja escuta Firestore para ultimo evento de sensor.
 - O controle da bomba usa MQTT diretamente do frontend.
 - O backend le Firestore para relatorios, alertas e agente IA.
-- A Cloud Function de alertas agora esta separada em `functions/src/index.js`, mas ainda precisa de configuracao Firebase, autenticacao, secrets e idempotencia antes de deploy.
+- A Firebase Function de alertas esta estruturada em `functions/src/index.ts`, com build/test locais. Emulator e deploy ainda precisam de projeto Firebase, Firebase CLI e secrets configurados.

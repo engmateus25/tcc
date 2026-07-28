@@ -18,6 +18,10 @@ node_modules/
 
 /frontend/node_modules/
 /frontend/dist/
+/functions/node_modules/
+/functions/lib/
+/functions/.env
+.runtimeconfig.json
 
 # testing
 /coverage
