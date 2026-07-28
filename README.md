@@ -53,6 +53,7 @@ Backend -> Firebase Admin -> leitura de eventos, sessoes e alertas
 |       |-- TCC_Final/
 |       `-- TCC_2_sensores/
 `-- frontend/
+    |-- android/
     |-- src/
     |   |-- components/
     |   |-- hooks/
@@ -262,6 +263,9 @@ npm run build
 npm run lint
 npm run test.unit
 npm run test.e2e
+npm run cap:sync
+npm run android:sync
+npm run android:open
 ```
 
 Crie `frontend/.env` a partir de `frontend/.env.example` antes de iniciar o app. Variaveis principais:
@@ -293,6 +297,42 @@ Se `frontend/.env` ainda nao existir, a interface abre em modo degradado com Fir
 Durante desenvolvimento com Vite, o backend permite por padrao as origens locais `http://localhost:5173`, `http://127.0.0.1:5173`, `http://localhost:5174` e `http://127.0.0.1:5174`, alem das origens Ionic `8100`.
 
 `VITE_MQTT_PUBLISH_LEGACY_CONTROL=1` faz o app publicar tambem o payload texto em `bomba/controle`. Mantenha `0` com o firmware novo, porque ele ja assina `bomba/controle/v2`.
+
+### Android com Capacitor
+
+A plataforma Android fica em `frontend/android/` e foi gerada com Capacitor 7. A configuracao nativa atual usa:
+
+```text
+appId: br.com.aquamonitor.app
+appName: AquaMonitor
+webDir: dist
+```
+
+O `appId` ainda deve ser tratado como provisorio ate a definicao final do identificador de publicacao. Antes de abrir no Android Studio ou instalar em emulador/dispositivo, sincronize o bundle web:
+
+```bash
+cd frontend
+npm run android:sync
+```
+
+Para abrir o projeto nativo:
+
+```bash
+cd frontend
+npm run android:open
+```
+
+Em dispositivo fisico, `VITE_AI_BASE_URL=http://127.0.0.1:8000` aponta para o proprio celular, nao para o notebook. Use o IP do host na rede local, por exemplo `http://192.168.1.20:8000`, e rode o backend com `--host 0.0.0.0`. O manifesto Android permite `android:usesCleartextTraffic="true"` para esses testes locais com HTTP; antes de publicar, prefira backend HTTPS e remova essa permissao ampla.
+
+Pre-requisitos da maquina para compilar/rodar o app:
+
+```bash
+sudo apt update
+sudo apt install -y openjdk-17-jdk
+sudo snap install android-studio --classic
+```
+
+Depois de instalar o Android Studio, configure o Android SDK, uma imagem de emulador e aceite as licencas pelo proprio Android Studio.
 
 ## Firmware
 

@@ -831,7 +831,7 @@ Motivo: o app ja exibe os alertas persistidos. O proximo passo mais seguro e est
 - Pendencias relacionadas: mobile, Capacitor, backend URL, HTTPS, downloads, notificacoes, MQTT.
 - Objetivo: gerar e testar uma primeira versao Android sem recriar plataforma existente.
 - Contexto encontrado no codigo: Capacitor instalado; `capacitor.config.ts` tem `appId` generico; nao ha `frontend/android`.
-- Situacao atual: parcialmente configurado, plataforma ausente.
+- Situacao atual: plataforma Android criada e sincronizada; validacao em emulador/dispositivo depende do ambiente Android local.
 - Proposta de solucao: apos build frontend estabilizado, adicionar Android se aprovado, configurar appId/nome, URLs por ambiente, permissoes de rede e estrategia de download.
 - Backend afetado: CORS/HTTPS e URL publica.
 - Frontend afetado: Capacitor config, download de relatorios, notificacoes futuras.
@@ -844,7 +844,8 @@ Motivo: o app ja exibe os alertas persistidos. O proximo passo mais seguro e est
 - Criterios de aceite: `npx cap add android` apenas se pasta nao existir e com aprovacao; build sincronizado; app abre em emulador/dispositivo.
 - Plano de testes: build frontend, `npx cap sync android`, abrir Android Studio, testar rede, download, MQTT.
 - Arquivos provavelmente afetados: `frontend/capacitor.config.ts`, `frontend/android/*` se aprovado, `README.md`.
-- Status: AGUARDANDO RESPOSTA.
+- Status: AGUARDANDO VALIDACAO.
+- Resultado da validacao local: `@capacitor/android` foi instalado na versao `7.2.0`, `frontend/capacitor.config.ts` passou a usar `appId=br.com.aquamonitor.app`, `appName=AquaMonitor` e `webDir=dist`, e a pasta `frontend/android/` foi criada com `npx cap add android`. O fluxo `npm run android:sync` passou, incluindo build web e `cap sync android`; `npx cap doctor android` tambem passou para as dependencias Capacitor. O manifesto Android recebeu `android:usesCleartextTraffic="true"` para testes locais contra backend HTTP na rede. A maquina possui `adb`, mas nao possui `java`, `gradle`, `sdkmanager`, `emulator` nem comando do Android Studio no PATH; `./gradlew tasks` falhou com `JAVA_HOME is not set`, entao a abertura/compilacao em emulador ou dispositivo fisico ficou pendente de instalacao do JDK/Android Studio.
 - Resultado da validacao do usuario: _a preencher_.
 
 ## Matriz de testes obrigatorios
@@ -888,7 +889,7 @@ Motivo: o app ja exibe os alertas persistidos. O proximo passo mais seguro e est
 - Aprovar se dados reais do sistema podem ser enviados ao Gemini/OpenAI ou somente a Ollama local.
 - Validar `GEMINI_API_KEY` real e quota/latencia do `gemini-2.5-flash`.
 - Instalar Ollama e baixar `qwen3:4b-instruct` para validacao local.
-- Decidir se a plataforma Android sera adicionada neste repositorio e qual `appId` definitivo.
+- Definir o `appId` Android definitivo; a ATV-024 adicionou a plataforma com `br.com.aquamonitor.app` como identificador provisorio.
 
 ## Perguntas objetivas pendentes
 
@@ -906,7 +907,7 @@ Motivo: o app ja exibe os alertas persistidos. O proximo passo mais seguro e est
 12. Podemos enviar dados reais/resumos para provedores externos como Gemini?
 13. Qual modelo Gemini voce quer aprovar para a primeira integracao?
 14. A maquina que rodara Ollama tem GPU ou apenas CPU?
-15. Qual package id Android definitivo substitui `io.ionic.starter`?
+15. Qual package id Android definitivo substitui `io.ionic.starter`? Provisorio usado na ATV-024: `br.com.aquamonitor.app`.
 
 ## Validacoes executadas nesta auditoria inicial
 
