@@ -89,26 +89,27 @@ def list_alerts(
     db = firestore.client()
     start, end = _get_period_range(period)
     timeout = firestore_operation_timeout_seconds()
+    query_limit = max(1, min(max(limit * 5, limit), 500))
 
     query = (
         db.collection(ALERTS_COLLECTION)
         .where(filter=firestore.FieldFilter("detected_at", ">=", start))
         .where(filter=firestore.FieldFilter("detected_at", "<=", end))
     )
-    if status:
-        query = query.where(filter=firestore.FieldFilter("status", "==", status))
-    if severity:
-        query = query.where(filter=firestore.FieldFilter("severity", "==", severity))
 
-    query = query.order_by("detected_at", direction=firestore.Query.DESCENDING).limit(
-        max(1, min(limit, 500))
-    )
+    query = query.order_by("detected_at", direction=firestore.Query.DESCENDING).limit(query_limit)
 
     alerts: List[Dict[str, Any]] = []
     for doc in query.stream(retry=None, timeout=timeout):
         data = doc.to_dict() or {}
         data["id"] = data.get("id") or doc.id
+        if status and data.get("status") != status:
+            continue
+        if severity and data.get("severity") != severity:
+            continue
         alerts.append(data)
+        if len(alerts) >= limit:
+            break
     return alerts
 
 

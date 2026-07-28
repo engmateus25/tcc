@@ -188,6 +188,8 @@ function typeLabel(type: string) {
   const labels: Record<string, string> = {
     duplicate_event: "Duplicidade",
     unexpected_low_repeat: "Sequência",
+    unexpected_high_without_low: "Sequência",
+    low_dropped_while_high_active: "Sequência",
     implausible_drain_time: "Esvaziamento",
     out_of_order_event: "Ordem",
     missing_timestamp: "Timestamp",

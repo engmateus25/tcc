@@ -7,6 +7,7 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 from google.api_core.exceptions import (
     DeadlineExceeded,
+    FailedPrecondition,
     PermissionDenied,
     RetryError,
     ServiceUnavailable,
@@ -26,6 +27,7 @@ DEFAULT_FIRESTORE_OPERATION_TIMEOUT_SECONDS = 10.0
 
 FIRESTORE_DEPENDENCY_ERROR_TYPES = (
     DeadlineExceeded,
+    FailedPrecondition,
     PermissionDenied,
     RetryError,
     ServiceUnavailable,
@@ -194,11 +196,51 @@ def fetch_sensor_events(period: str) -> List[Dict]:
 
     events: List[Dict] = []
     for doc in query.stream(retry=None, timeout=firestore_operation_timeout_seconds()):
-        data = doc.to_dict()
-        raw_path = f"{SENSORS_COLLECTION}/{doc.id}"
-        data.setdefault("document_id", doc.id)
-        data.setdefault("raw_path", raw_path)
-        data.setdefault("event_id", raw_path)
-        events.append(data)
+        events.append(_sensor_event_from_doc(doc))
 
     return events
+
+
+def fetch_recent_sensor_events_before(
+    event: Dict,
+    *,
+    limit: int = 200,
+) -> List[Dict]:
+    event_ts = _normalize_datetime(event.get("timestamp"))
+    if event_ts is None:
+        return []
+
+    _init_firebase_admin_once()
+    db = firestore.client()
+    capped_limit = max(1, min(limit, 500))
+    query = (
+        db.collection(SENSORS_COLLECTION)
+        .where(filter=firestore.FieldFilter("timestamp", "<", event_ts))
+        .order_by("timestamp", direction=firestore.Query.DESCENDING)
+        .limit(capped_limit)
+    )
+
+    events: List[Dict] = []
+    for doc in query.stream(retry=None, timeout=firestore_operation_timeout_seconds()):
+        events.append(_sensor_event_from_doc(doc))
+    events.reverse()
+    return events
+
+
+def _sensor_event_from_doc(doc) -> Dict:
+    data = doc.to_dict() or {}
+    raw_path = f"{SENSORS_COLLECTION}/{doc.id}"
+    data.setdefault("document_id", doc.id)
+    data.setdefault("raw_path", raw_path)
+    data.setdefault("event_id", raw_path)
+    return data
+
+
+def _normalize_datetime(value) -> datetime | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
+    return None

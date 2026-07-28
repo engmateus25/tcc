@@ -64,6 +64,16 @@ def test_out_of_order_event_is_flagged():
     assert "out_of_order_event" in alert_types(alerts)
 
 
+def test_high_rising_after_low_dropped_is_flagged():
+    alerts = evaluate_sensor_event_rules(
+        event("sensores/doc-2", "alto", "subiu", 30),
+        [event("sensores/doc-1", "baixo", "desceu", 0)],
+        CONFIG,
+    )
+
+    assert "unexpected_high_without_low" in alert_types(alerts)
+
+
 def test_missing_timestamp_blocks_cycle_processing():
     alerts = evaluate_sensor_event_rules(
         {"event_id": "sensores/doc-1", "sensor": "baixo", "estado": "subiu"},

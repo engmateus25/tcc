@@ -548,7 +548,7 @@ Motivo: o app ja exibe os alertas persistidos. O proximo passo mais seguro e est
 - Plano de testes: pytest dos endpoints, `tsc`, `lint`, `build`, estado sem alertas, erro de conexao e reconhecimento.
 - Arquivos provavelmente afetados: `frontend/src/services/alerts.ts`, `frontend/src/hooks/useAlerts.ts`, `frontend/src/components/IntelligentAlertsPanel.tsx`, `frontend/src/pages/HomePage.tsx`, `backend/tests/test_alert_endpoints.py`.
 - Status: AGUARDANDO VALIDACAO.
-- Resultado da validacao local: criado painel `IntelligentAlertsPanel` na Home, hook `useAlerts` com polling de 15 segundos, service HTTP para `GET /alerts` e `PATCH /alerts/{alert_id}/ack`, estados de loading/erro/vazio e acao de reconhecer alerta. O backend foi ajustado para expor as rotas sob `/alerts`, limitar chamadas Firestore, retornar `503` claro em falhas de credencial/conectividade e pytest cobre registro das rotas, chamadas diretas dos endpoints e falhas operacionais do Firestore.
+- Resultado da validacao local: criado painel `IntelligentAlertsPanel` na Home, hook `useAlerts` com polling de 15 segundos, service HTTP para `GET /alerts` e `PATCH /alerts/{alert_id}/ack`, estados de loading/erro/vazio e acao de reconhecer alerta. O backend foi ajustado para expor as rotas sob `/alerts`, permitir CORS local do Vite, limitar chamadas Firestore, consultar alertas sem depender de indice composto, usar historico recente persistido no POST de eventos, retornar `503` claro em falhas de credencial/conectividade e pytest cobre registro das rotas, chamadas diretas dos endpoints e falhas operacionais do Firestore.
 - Resultado da validacao do usuario: _a preencher_.
 
 ### ATV-013 - Organizar configuracoes e secrets por ambiente
@@ -931,10 +931,13 @@ Motivo: o app ja exibe os alertas persistidos. O proximo passo mais seguro e est
 
 ## Validacoes executadas apos ATV-012
 
-- `cd backend && source .venv/bin/activate && pytest`: passou com 28 testes, incluindo endpoints de alertas persistidos e resposta `503` para falhas operacionais do Firestore.
+- `cd backend && source .venv/bin/activate && pytest`: passou com 30 testes, incluindo endpoints de alertas persistidos, resposta `503` para falhas operacionais do Firestore, filtro local de `status/severity` sem indice composto e regra `baixo desceu -> alto subiu`.
 - `cd backend && source .venv/bin/activate && python -m compileall app tests`: passou.
 - `GET /alerts?period=7d&status=open&limit=1` com backend local: retornou `503 Service Unavailable` claro quando a credencial Firebase Admin atual falhou.
 - `POST /alerts/sensor-event` com backend local: retornou `503 Service Unavailable` claro quando a credencial Firebase Admin atual falhou.
+- Apos corrigir a credencial Firebase Admin, `GET /alerts?period=7d&status=open&limit=5` com backend local retornou `200 OK` e alertas abertos reais sem exigir indice composto Firestore.
+- Preflight CORS de `http://localhost:5173` para `GET /alerts` retornou `200 OK` com `access-control-allow-origin: http://localhost:5173`.
+- Sequencia validada via `POST /alerts/sensor-event`: `baixo desceu` seguido de `alto subiu` retornou `alerts_created` com `unexpected_high_without_low`.
 - `cd frontend && npm exec tsc -- --noEmit`: passou.
 - `cd frontend && npm run lint`: passou com 6 avisos nao bloqueantes de `react-refresh/only-export-components`.
 - `cd frontend && npm run build`: passou com avisos nao bloqueantes de Browserslist/Baseline desatualizados e chunks acima de 500 kB.

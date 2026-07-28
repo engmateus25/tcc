@@ -206,6 +206,8 @@ Variavel de ambiente relevante:
 VITE_AI_BASE_URL=http://127.0.0.1:8000
 ```
 
+Durante desenvolvimento com Vite, o backend permite por padrao as origens locais `http://localhost:5173`, `http://127.0.0.1:5173`, `http://localhost:5174` e `http://127.0.0.1:5174`, alem das origens Ionic `8100`.
+
 ## Firmware
 
 O firmware fica em `firmware/TCC.ino/` e possui duas variantes:
@@ -276,7 +278,7 @@ O webhook `POST /alerts/sensor-event` aceita o payload legado do firmware e o pa
 
 Quando `SENSOR_EVENT_WEBHOOK_SECRET` estiver definido no backend, a chamada deve enviar o header `X-AquaMonitor-Webhook-Secret`. O backend usa `event_id`, `raw_path` ou `document_id` como chave idempotente e registra o processamento em `sensor_event_processing`.
 
-As colecoes tecnicas `sensor_event_processing`, `alerts` e `filling_cycles` sao criadas automaticamente pelo Firestore no primeiro documento gravado com credenciais Firebase Admin validas. Se a credencial estiver invalida ou indisponivel, as rotas de alertas retornam `503` em vez de aguardar o retry longo padrao do SDK.
+As colecoes tecnicas `sensor_event_processing`, `alerts` e `filling_cycles` sao criadas automaticamente pelo Firestore no primeiro documento gravado com credenciais Firebase Admin validas. Se a credencial estiver invalida ou indisponivel, as rotas de alertas retornam `503` em vez de aguardar o retry longo padrao do SDK. A consulta `GET /alerts` busca por periodo e filtra `status`/`severity` no backend para nao depender de indice composto do Firestore durante o desenvolvimento local.
 
 Depois da idempotencia, o backend aplica regras deterministicas antes de qualquer analise temporal. Eventos com alerta bloqueante, como duplicidade, timestamp ausente, fora de ordem, repeticao suspeita do sensor baixo ou esvaziamento rapido demais, nao alimentam ciclos nem a analise de tempo de enchimento.
 

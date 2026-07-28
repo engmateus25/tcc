@@ -10,11 +10,22 @@ from app.tasks.scheduler import start_scheduler_if_enabled
 
 load_dotenv()
 
+DEFAULT_CORS_ORIGINS = [
+    "http://localhost:8100",
+    "https://localhost:8100",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:5174",
+    "http://127.0.0.1:5174",
+]
+
+
 def get_cors_origins():
     raw = os.getenv("CORS_ORIGINS", "")
     if not raw:
-        return ["*"]
-    return [o.strip() for o in raw.split(",") if o.strip()]
+        return DEFAULT_CORS_ORIGINS
+    configured = [o.strip() for o in raw.split(",") if o.strip()]
+    return list(dict.fromkeys([*configured, *DEFAULT_CORS_ORIGINS]))
 
 app = FastAPI(title="AquaMonitor AI Backend", version="0.1.0")
 

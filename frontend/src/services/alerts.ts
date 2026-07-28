@@ -49,9 +49,14 @@ export async function fetchAlerts(query: AlertQuery = {}): Promise<AlertListResp
     params.set("severity", query.severity);
   }
 
-  const response = await fetch(`${BASE_URL}/alerts?${params.toString()}`);
+  let response: Response;
+  try {
+    response = await fetch(`${BASE_URL}/alerts?${params.toString()}`);
+  } catch {
+    throw new Error("Não foi possível conectar ao backend de alertas");
+  }
   if (!response.ok) {
-    throw new Error(`HTTP ${response.status}`);
+    throw new Error(await getApiErrorMessage(response));
   }
   return response.json() as Promise<AlertListResponse>;
 }
@@ -59,11 +64,28 @@ export async function fetchAlerts(query: AlertQuery = {}): Promise<AlertListResp
 export async function acknowledgeAlert(
   alertId: string,
 ): Promise<AlertAcknowledgeResponse> {
-  const response = await fetch(`${BASE_URL}/alerts/${encodeURIComponent(alertId)}/ack`, {
-    method: "PATCH",
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${BASE_URL}/alerts/${encodeURIComponent(alertId)}/ack`, {
+      method: "PATCH",
+    });
+  } catch {
+    throw new Error("Não foi possível conectar ao backend de alertas");
+  }
   if (!response.ok) {
-    throw new Error(`HTTP ${response.status}`);
+    throw new Error(await getApiErrorMessage(response));
   }
   return response.json() as Promise<AlertAcknowledgeResponse>;
+}
+
+async function getApiErrorMessage(response: Response): Promise<string> {
+  try {
+    const data = await response.json() as { detail?: unknown };
+    if (typeof data.detail === "string") {
+      return data.detail;
+    }
+  } catch {
+    // Mantem o fallback HTTP abaixo quando a resposta nao for JSON.
+  }
+  return `HTTP ${response.status}`;
 }
