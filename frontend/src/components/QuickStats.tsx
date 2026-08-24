@@ -40,8 +40,6 @@ export function QuickStats({ waterLevel, isPumpOn, dailyUsage = null }: QuickSta
     };
   }, [dailyUsage]);
 
-  const tankCapacityLiters = 5000;
-  const currentLiters = Math.round((waterLevel / 100) * tankCapacityLiters);
   const usageText =
     averageDailyUsage !== null
       ? `${Math.round(averageDailyUsage).toLocaleString("pt-BR")}L`
@@ -49,13 +47,13 @@ export function QuickStats({ waterLevel, isPumpOn, dailyUsage = null }: QuickSta
 
   return (
     <div className="grid grid-cols-3 gap-3 mb-6">
-      {/* Volume Atual */}
+      {/* Nível visual */}
       <Card className="p-3 bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
         <div className="flex flex-col items-center text-center">
           <Droplets className="w-5 h-5 text-blue-600 mb-1" />
-          <p className="text-xs text-blue-600 mb-1">Volume</p>
-          <p className="text-lg text-blue-800">{currentLiters}L</p>
-          <p className="text-xs text-blue-500">de {tankCapacityLiters}L</p>
+          <p className="text-xs text-blue-600 mb-1">Nível visual</p>
+          <p className="text-lg text-blue-800">{Math.round(waterLevel)}%</p>
+          <p className="text-xs text-blue-500">estimado</p>
         </div>
       </Card>
 

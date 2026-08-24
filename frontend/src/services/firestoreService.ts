@@ -4,6 +4,10 @@ import {
   type FirestoreError, type QueryConstraint,
 } from "firebase/firestore";
 import { db, firebaseConfigError } from "./firestoreConfig";
+import {
+  buildSensorTelemetrySnapshot,
+  SensorTelemetrySnapshot,
+} from "./waterTelemetry";
 
 type FirestoreTimestampLike =
   | Timestamp
@@ -127,39 +131,80 @@ function normalizeTimestamp(ts: FirestoreTimestampLike): Date {
 }
 
 /**
- * Observa em tempo real o último documento de `sensores`.
- * Usa orderBy("timestamp","desc") + limit(1).
+ * Compatibilidade para componentes antigos: observa o último documento válido
+ * da coleção `sensores`, sem tratar snapshot vazio como desconexão.
  */
 export function listenUltimoEstado(
   onChange: (ev: UltimoEvento | null) => void,
   onError?: (e: FirestoreError) => void
 ): Unsubscribe {
+  return listenSensorTelemetry(
+    (snapshot) => {
+      const latest = snapshot.latestEvent;
+      onChange(
+        latest
+          ? {
+              id: latest.id,
+              sensor: latest.sensor,
+              estado: latest.estado,
+              timestamp: latest.timestamp,
+            }
+          : null,
+      );
+    },
+    onError,
+    { limitCount: 1 },
+  );
+}
+
+export function listenSensorTelemetry(
+  onChange: (snapshot: SensorTelemetrySnapshot) => void,
+  onError?: (e: FirestoreError) => void,
+  options: { limitCount?: number } = {},
+): Unsubscribe {
   if (!db) {
     logFirebaseConfigError();
-    onChange(null);
+    onChange({
+      status: "error",
+      events: [],
+      latestEvent: null,
+      fromCache: false,
+      error: firebaseConfigError || "Firebase não configurado",
+    });
     return () => undefined;
   }
 
   const sensoresRef = collection(db, "sensores");
-  const q = query(sensoresRef, orderBy("timestamp", "desc"), limit(1));
+  const q = query(
+    sensoresRef,
+    orderBy("timestamp", "desc"),
+    limit(options.limitCount || 10),
+  );
 
   return onSnapshot(
     q,
+    { includeMetadataChanges: true },
     (snap) => {
-      if (snap.empty) {
-        onChange(null);
-        return;
-      }
-      const doc = snap.docs[0];
-      const data = doc.data() as SensorDocumentData;
-      onChange({
+      const docs = snap.docs.map((doc) => ({
         id: doc.id,
-        sensor: readString(data.sensor),
-        estado: readString(data.estado),
-        timestamp: normalizeTimestamp(data.timestamp),
-      });
+        data: doc.data() as Record<string, unknown>,
+      }));
+      onChange(
+        buildSensorTelemetrySnapshot(docs, {
+          fromCache: snap.metadata.fromCache,
+        }),
+      );
     },
-    (err) => onError?.(err)
+    (err) => {
+      onChange({
+        status: "error",
+        events: [],
+        latestEvent: null,
+        fromCache: false,
+        error: err.message,
+      });
+      onError?.(err);
+    },
   );
 }
 

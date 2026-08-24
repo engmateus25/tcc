@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  buildCommandEventPayload,
   buildSensorEventPayload,
   buildWebhookHeaders,
   normalizeTimestamp,
@@ -78,5 +79,52 @@ test("buildWebhookHeaders includes secret only when configured", () => {
   assert.deepEqual(buildWebhookHeaders("secret"), {
     "Content-Type": "application/json",
     "X-AquaMonitor-Webhook-Secret": "secret",
+  });
+});
+
+test("buildCommandEventPayload maps Firestore command data to backend contract", () => {
+  const receivedAt = new Date("2026-08-24T18:00:01.000Z");
+  const payload = buildCommandEventPayload(
+    {
+      data: () => ({
+        command_id: "cmd-1",
+        bomba: "bomba ligar",
+        acionamento: "remoto",
+        requested_state: true,
+        applied_state: true,
+        applied: true,
+        confirmed: true,
+        state_changed: true,
+        priority: "remoto",
+        overridden_by: "",
+        reason: "mqtt ligar",
+        timestamp: "2026-08-24T18:00:00Z",
+        device_id: "esp32-reservatorio-01",
+      }),
+      ref: { path: "comandos/doc-1" },
+    },
+    "doc-1",
+    receivedAt,
+  );
+
+  assert.deepEqual(payload, {
+    document_id: "doc-1",
+    event_id: "comandos/doc-1",
+    command_id: "cmd-1",
+    timestamp: "2026-08-24T18:00:00.000Z",
+    device_id: "esp32-reservatorio-01",
+    source: "firestore_on_create",
+    raw_path: "comandos/doc-1",
+    received_at: "2026-08-24T18:00:01.000Z",
+    bomba: "bomba ligar",
+    acionamento: "remoto",
+    requested_state: true,
+    applied_state: true,
+    applied: true,
+    confirmed: true,
+    state_changed: true,
+    priority: "remoto",
+    overridden_by: null,
+    reason: "mqtt ligar",
   });
 });

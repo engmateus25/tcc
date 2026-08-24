@@ -1,18 +1,43 @@
 // src/hooks/useWaterSystem.ts
-import { useEffect, useMemo, useState, useCallback } from "react";
-import type { LastSensor, PumpMode } from "../types/water-system";
+import {
+  createContext,
+  createElement,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import type { PropsWithChildren } from "react";
+import type {
+  FirebaseConnectionStatus,
+  LastSensor,
+  PumpMode,
+} from "../types/water-system";
 import client, {
   enviarComando,
   parsePumpStateMessage,
   PumpStateMessage,
 } from "../services/mqttService";
-import { listenUltimoEstado, UltimoEvento } from "../services/firestoreService";
+import { listenSensorTelemetry } from "../services/firestoreService";
+import {
+  deriveOperationalState,
+  estimateVisualWaterLevel,
+  formatSensorDateTime,
+  NormalizedSensorEvent,
+  WATER_LEVEL_ESTIMATION_CONFIG,
+} from "../services/waterTelemetry";
 
 type State = {
   waterLevel: number;
+  reservoirStatus: string;
+  waitingForHighConfirmation: boolean;
   isPumpOn: boolean;
   pumpMode: PumpMode;
   lastSensor: LastSensor | null;
+  sensorEvents: NormalizedSensorEvent[];
+  firebaseStatus: FirebaseConnectionStatus;
+  firebaseError: string | null;
   isConnected: { firebase: boolean; mqtt: boolean };
   pendingCommand: {
     commandId: string;
@@ -21,9 +46,22 @@ type State = {
   lastPumpStatus: string | null;
 };
 
-function isLastSensorAction(value: string): value is LastSensor["action"] {
-  return value === "subiu" || value === "desceu";
+export interface WaterSystemValue {
+  waterLevel: number;
+  reservoirStatus: string;
+  waitingForHighConfirmation: boolean;
+  isPumpOn: boolean;
+  pumpMode: PumpMode;
+  lastSensor: LastSensor | null;
+  firebaseStatus: FirebaseConnectionStatus;
+  firebaseError: string | null;
+  pendingPumpCommand: State["pendingCommand"];
+  pumpStatusMessage: string | null;
+  isConnected: State["isConnected"];
+  togglePump: () => void;
 }
+
+const WaterSystemContext = createContext<WaterSystemValue | null>(null);
 
 function isPumpMode(value: unknown): value is PumpMode {
   return (
@@ -34,42 +72,94 @@ function isPumpMode(value: unknown): value is PumpMode {
 }
 
 const initialState: State = {
-  waterLevel: 42,
+  waterLevel: WATER_LEVEL_ESTIMATION_CONFIG.lowSensorRaisedLevelPercent,
+  reservoirStatus: "Aguardando leitura",
+  waitingForHighConfirmation: false,
   isPumpOn: false,
   pumpMode: "automático",
-  lastSensor: { name: "alto", action: "subiu", time: "04:11:37" },
+  lastSensor: null,
+  sensorEvents: [],
+  firebaseStatus: "connecting",
+  firebaseError: null,
   isConnected: { firebase: false, mqtt: false },
   pendingCommand: null,
   lastPumpStatus: null,
 };
 
-export function useWaterSystem() {
+export function useWaterSystemState(): WaterSystemValue {
   const [state, setState] = useState<State>(initialState);
 
   // ---- FIRESTORE: escuta o último evento da coleção `sensores` ----
   useEffect(() => {
-    const unsub = listenUltimoEstado(
-      (ev: UltimoEvento | null) => {
-        if (!ev) {
-          setState((s) => ({ ...s, isConnected: { ...s.isConnected, firebase: false } }));
-          return;
-        }
-        const ls: LastSensor = {
-          name: ev.sensor,
-          action: isLastSensorAction(ev.estado) ? ev.estado : "desceu",
-          time: ev.timestamp.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
-        };
-        setState((s) => ({
+    const unsub = listenSensorTelemetry((snapshot) => {
+      setState((s) => {
+        const visual = estimateVisualWaterLevel(
+          snapshot.events,
+          new Date(),
+          { pumpOn: s.isPumpOn },
+        );
+        const operationalState = deriveOperationalState(
+          snapshot.events,
+          { pumpOn: s.isPumpOn },
+        );
+        const latest = snapshot.latestEvent;
+        const lastSensor: LastSensor | null = latest
+          ? {
+              name: latest.sensor,
+              action: latest.estado,
+              date: latest.timestamp.toLocaleDateString("pt-BR"),
+              time: latest.timestamp.toLocaleTimeString("pt-BR", {
+                hour: "2-digit",
+                minute: "2-digit",
+                second: "2-digit",
+              }),
+              dateTime: formatSensorDateTime(latest.timestamp),
+              operationalState,
+            }
+          : null;
+
+        return {
           ...s,
-          lastSensor: ls,
-          waterLevel: estimateWaterLevelFromSensorEvent(ls, s.waterLevel),
-          isConnected: { ...s.isConnected, firebase: true },
-        }));
-      },
-      () => setState((s) => ({ ...s, isConnected: { ...s.isConnected, firebase: false } }))
-    );
+          sensorEvents: snapshot.events,
+          lastSensor,
+          waterLevel: visual.level,
+          reservoirStatus: visual.waitingForHighConfirmation
+            ? "Aguardando confirmação do sensor alto"
+            : visual.label,
+          waitingForHighConfirmation: visual.waitingForHighConfirmation,
+          firebaseStatus: snapshot.status,
+          firebaseError: snapshot.error || null,
+          isConnected: {
+            ...s.isConnected,
+            firebase: snapshot.status === "connected",
+          },
+        };
+      });
+    });
 
     return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setState((s) => {
+        const visual = estimateVisualWaterLevel(
+          s.sensorEvents,
+          new Date(),
+          { pumpOn: s.isPumpOn },
+        );
+        return {
+          ...s,
+          waterLevel: visual.level,
+          reservoirStatus: visual.waitingForHighConfirmation
+            ? "Aguardando confirmação do sensor alto"
+            : visual.label,
+          waitingForHighConfirmation: visual.waitingForHighConfirmation,
+        };
+      });
+    }, 5000);
+
+    return () => window.clearInterval(interval);
   }, []);
 
   // ---- MQTT: usa SEU client e tópicos já existentes ----
@@ -131,11 +221,15 @@ export function useWaterSystem() {
     }));
   }, [state.isPumpOn]);
 
-  return useMemo(() => ({
+  return useMemo<WaterSystemValue>(() => ({
     waterLevel: state.waterLevel,
+    reservoirStatus: state.reservoirStatus,
+    waitingForHighConfirmation: state.waitingForHighConfirmation,
     isPumpOn: state.isPumpOn,
     pumpMode: state.pumpMode,
-    lastSensor: state.lastSensor!,
+    lastSensor: state.lastSensor,
+    firebaseStatus: state.firebaseStatus,
+    firebaseError: state.firebaseError,
     pendingPumpCommand: state.pendingCommand,
     pumpStatusMessage: state.lastPumpStatus,
     isConnected: state.isConnected,    // usado pela status bar (Firebase/MQTT)
@@ -143,15 +237,19 @@ export function useWaterSystem() {
   }), [state, togglePump]);
 }
 
-function estimateWaterLevelFromSensorEvent(
-  event: LastSensor,
-  fallback: number,
-): number {
-  if (event.name === "baixo" && event.action === "desceu") return 15;
-  if (event.name === "baixo" && event.action === "subiu") return 55;
-  if (event.name === "alto" && event.action === "subiu") return 96;
-  if (event.name === "alto" && event.action === "desceu") return 62;
-  return fallback;
+export function WaterSystemProvider({
+  children,
+  value,
+}: PropsWithChildren<{ value: WaterSystemValue }>) {
+  return createElement(WaterSystemContext.Provider, { value }, children);
+}
+
+export function useWaterSystem(): WaterSystemValue {
+  const value = useContext(WaterSystemContext);
+  if (!value) {
+    throw new Error("useWaterSystem deve ser usado dentro de WaterSystemProvider");
+  }
+  return value;
 }
 
 function applyPumpStateMessage(state: State, message: PumpStateMessage): State {
@@ -160,17 +258,17 @@ function applyPumpStateMessage(state: State, message: PumpStateMessage): State {
   const nextMode = normalizePumpMode(message.mode || message.source) ?? state.pumpMode;
 
   if (!message.applied) {
-    return {
+    return withVisualState({
       ...state,
       pumpMode: nextMode,
       pendingCommand,
       lastPumpStatus: message.overriddenBy
         ? `Comando sobreposto por ${message.overriddenBy}`
         : "Comando não aplicado",
-    };
+    });
   }
 
-  return {
+  return withVisualState({
     ...state,
     isPumpOn: message.confirmed ? message.pumpOn : state.isPumpOn,
     pumpMode: nextMode,
@@ -178,6 +276,29 @@ function applyPumpStateMessage(state: State, message: PumpStateMessage): State {
     lastPumpStatus: message.confirmed
       ? "Estado confirmado pela bomba"
       : "Comando aplicado sem confirmação física",
+  });
+}
+
+function withVisualState(state: State): State {
+  const visual = estimateVisualWaterLevel(
+    state.sensorEvents,
+    new Date(),
+    { pumpOn: state.isPumpOn },
+  );
+  const operationalState = deriveOperationalState(
+    state.sensorEvents,
+    { pumpOn: state.isPumpOn },
+  );
+  return {
+    ...state,
+    waterLevel: visual.level,
+    reservoirStatus: visual.waitingForHighConfirmation
+      ? "Aguardando confirmação do sensor alto"
+      : visual.label,
+    waitingForHighConfirmation: visual.waitingForHighConfirmation,
+    lastSensor: state.lastSensor
+      ? { ...state.lastSensor, operationalState }
+      : state.lastSensor,
   };
 }
 

@@ -57,6 +57,35 @@ def fetch_pump_command_events(period: str) -> List[Dict[str, Any]]:
     return events
 
 
+def fetch_recent_pump_command_events_before(
+    event: Dict[str, Any],
+    *,
+    limit: int = 100,
+) -> List[Dict[str, Any]]:
+    event_ts = _normalize_datetime(event.get("timestamp"))
+    if event_ts is None:
+        return []
+
+    _init_firebase_admin_once()
+    db = firestore.client()
+    timeout = firestore_operation_timeout_seconds()
+    capped_limit = max(1, min(limit, 500))
+    query = (
+        db.collection(COMMANDS_COLLECTION)
+        .where(filter=firestore.FieldFilter("timestamp", "<=", event_ts))
+        .order_by("timestamp", direction=firestore.Query.DESCENDING)
+        .limit(capped_limit)
+    )
+
+    events: List[Dict[str, Any]] = []
+    for doc in query.stream(retry=None, timeout=timeout):
+        normalized = normalize_pump_event(doc.to_dict() or {}, doc_id=doc.id)
+        if normalized:
+            events.append(normalized)
+    events.reverse()
+    return events
+
+
 def get_energy_summary(period: str = "7d") -> Dict[str, Any]:
     return build_energy_summary(fetch_pump_command_events(period), period=period)
 

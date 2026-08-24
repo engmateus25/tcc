@@ -17,7 +17,7 @@ FILLING_CYCLES_COLLECTION = os.getenv(
 
 
 def is_cycle_start_event(event: Dict[str, Any]) -> bool:
-    return _clean_text(event.get("sensor")) == "baixo" and _clean_text(event.get("estado")) == "subiu"
+    return _clean_text(event.get("sensor")) == "baixo" and _clean_text(event.get("estado")) == "desceu"
 
 
 def is_cycle_end_event(event: Dict[str, Any]) -> bool:
@@ -49,12 +49,20 @@ def build_filling_cycle(
         "end_event_id": end_event_id,
         "started_at": started_at,
         "ended_at": ended_at,
+        "pump_started_at": started_at if _is_pump_command_start(start_event) else None,
         "fill_time_seconds": fill_time_seconds,
         "valid": True,
         "device_id": end_event.get("device_id") or start_event.get("device_id"),
+        "start_source": start_event.get("start_source") or _infer_start_source(start_event),
+        "start_event_type": start_event.get("event_type") or _infer_event_type(start_event),
+        "pump_mode": start_event.get("mode") or start_event.get("priority") or start_event.get("source"),
+        "discard_reason": None,
         "metadata": {
             "start_sensor": start_event.get("sensor"),
             "start_estado": start_event.get("estado"),
+            "start_command_id": start_event.get("command_id"),
+            "start_applied": start_event.get("applied"),
+            "start_confirmed": start_event.get("confirmed"),
             "end_sensor": end_event.get("sensor"),
             "end_estado": end_event.get("estado"),
         },
@@ -114,7 +122,14 @@ class FillingCycleTracker:
         device_key = str(event.get("device_id") or "default")
 
         if is_cycle_start_event(event):
-            self.pending_start_by_device[device_key] = event
+            self.pending_start_by_device.setdefault(
+                device_key,
+                {
+                    **event,
+                    "start_source": event.get("start_source") or "sensor_low_fallback",
+                    "event_type": event.get("event_type") or "sensor",
+                },
+            )
             return None
 
         if not is_cycle_end_event(event):
@@ -132,6 +147,18 @@ class FillingCycleTracker:
         self.completed_cycles.append(cycle)
         return cycle
 
+    def process_command_event(self, event: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        device_key = str(event.get("device_id") or "default")
+        if _is_pump_command_start(event):
+            self.pending_start_by_device[device_key] = {
+                **event,
+                "start_source": "pump_command_confirmed",
+                "event_type": "command",
+            }
+        elif _is_pump_command_stop(event):
+            self.pending_start_by_device.pop(device_key, None)
+        return None
+
 
 def _cycle_summary(cycle: Dict[str, Any], *, duplicate: bool) -> Dict[str, Any]:
     return {
@@ -146,7 +173,7 @@ def _cycle_summary(cycle: Dict[str, Any], *, duplicate: bool) -> Dict[str, Any]:
 
 
 def _event_identity(event: Dict[str, Any]) -> str:
-    for key in ("event_id", "raw_path", "document_id"):
+    for key in ("event_id", "raw_path", "document_id", "command_id"):
         value = event.get(key)
         if value:
             text = str(value).strip()
@@ -155,11 +182,53 @@ def _event_identity(event: Dict[str, Any]) -> str:
     return "unknown"
 
 
+def _is_pump_command_start(event: Dict[str, Any]) -> bool:
+    return (
+        _read_optional_bool(event.get("applied")) is True
+        and _read_optional_bool(event.get("confirmed")) is True
+        and _read_optional_bool(event.get("applied_state")) is True
+    )
+
+
+def _is_pump_command_stop(event: Dict[str, Any]) -> bool:
+    return (
+        _read_optional_bool(event.get("applied")) is True
+        and _read_optional_bool(event.get("confirmed")) is True
+        and _read_optional_bool(event.get("applied_state")) is False
+    )
+
+
+def _infer_start_source(event: Dict[str, Any]) -> str:
+    if _is_pump_command_start(event):
+        return "pump_command_confirmed"
+    if is_cycle_start_event(event):
+        return "sensor_low_fallback"
+    return "unknown"
+
+
+def _infer_event_type(event: Dict[str, Any]) -> str:
+    if _is_pump_command_start(event) or _is_pump_command_stop(event):
+        return "command"
+    return "sensor"
+
+
 def _clean_text(value: Any) -> Optional[str]:
     if value is None:
         return None
     text = str(value).strip().lower()
     return text or None
+
+
+def _read_optional_bool(value: Any) -> Optional[bool]:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        text = value.strip().lower()
+        if text in ("true", "1", "yes", "sim", "ligar", "ligada", "on"):
+            return True
+        if text in ("false", "0", "no", "nao", "não", "desligar", "desligada", "off"):
+            return False
+    return None
 
 
 def _normalize_datetime(value: Any) -> Optional[datetime]:

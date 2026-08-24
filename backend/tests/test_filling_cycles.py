@@ -1,7 +1,11 @@
 from datetime import datetime, timedelta, timezone
 
 from app.services.autocloud_fill_time import analyze_fill_time_cycle
-from app.services.filling_cycles import build_filling_cycle, extract_filling_cycles
+from app.services.filling_cycles import (
+    FillingCycleTracker,
+    build_filling_cycle,
+    extract_filling_cycles,
+)
 
 
 BASE = datetime(2026, 7, 27, 12, 0, tzinfo=timezone.utc)
@@ -13,6 +17,21 @@ def event(event_id, sensor, estado, seconds):
         "sensor": sensor,
         "estado": estado,
         "timestamp": BASE + timedelta(seconds=seconds),
+        "device_id": "esp32-reservatorio-01",
+    }
+
+
+def command(event_id, seconds, *, applied=True, confirmed=True, applied_state=True):
+    return {
+        "event_id": event_id,
+        "command_id": event_id.rsplit("/", 1)[-1],
+        "timestamp": BASE + timedelta(seconds=seconds),
+        "applied": applied,
+        "confirmed": confirmed,
+        "applied_state": applied_state,
+        "source": "remoto",
+        "priority": "remoto",
+        "device_id": "esp32-reservatorio-01",
     }
 
 
@@ -32,21 +51,42 @@ def test_extracts_low_to_high_filling_cycle():
     cycles = extract_filling_cycles(
         [
             event("sensores/empty", "baixo", "desceu", 0),
-            event("sensores/start", "baixo", "subiu", 60),
-            event("sensores/end", "alto", "subiu", 540),
+            event("sensores/low-up", "baixo", "subiu", 60),
+            event("sensores/end", "alto", "subiu", 480),
         ]
     )
 
     assert len(cycles) == 1
-    assert cycles[0]["start_event_id"] == "sensores/start"
+    assert cycles[0]["start_event_id"] == "sensores/empty"
     assert cycles[0]["end_event_id"] == "sensores/end"
     assert cycles[0]["fill_time_seconds"] == 480
+    assert cycles[0]["start_source"] == "sensor_low_fallback"
+
+
+def test_prefers_confirmed_pump_command_as_filling_cycle_start():
+    tracker = FillingCycleTracker()
+    tracker.process_command_event(command("comandos/start", 0))
+    cycle_created = tracker.process_event(event("sensores/end", "alto", "subiu", 480))
+
+    assert cycle_created is not None
+    assert cycle_created["start_event_id"] == "comandos/start"
+    assert cycle_created["start_source"] == "pump_command_confirmed"
+    assert cycle_created["pump_started_at"] == BASE
+    assert cycle_created["fill_time_seconds"] == 480
+
+
+def test_ignores_unconfirmed_pump_command_as_cycle_start():
+    tracker = FillingCycleTracker()
+    tracker.process_command_event(command("comandos/start", 0, confirmed=False))
+    cycle_created = tracker.process_event(event("sensores/end", "alto", "subiu", 480))
+
+    assert cycle_created is None
 
 
 def test_invalid_event_does_not_feed_cycle_extraction():
     cycles = extract_filling_cycles(
         [
-            event("sensores/start", "baixo", "subiu", 0),
+            event("sensores/start", "baixo", "desceu", 0),
             event("sensores/end", "alto", "subiu", 480),
         ],
         invalid_event_ids={"sensores/start"},
@@ -58,7 +98,7 @@ def test_invalid_event_does_not_feed_cycle_extraction():
 def test_rejects_cycle_with_non_positive_duration():
     assert (
         build_filling_cycle(
-            event("sensores/start", "baixo", "subiu", 60),
+            event("sensores/start", "baixo", "desceu", 60),
             event("sensores/end", "alto", "subiu", 30),
         )
         is None

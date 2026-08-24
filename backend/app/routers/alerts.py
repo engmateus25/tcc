@@ -5,13 +5,14 @@ from fastapi import APIRouter, Header, HTTPException, Query, status
 from app.schemas.dto import (
     AlertAcknowledgeResponse,
     AlertListResponse,
+    CommandEventIn,
     SensorEventIn,
     SensorEventProcessResponse,
 )
 from app.services.alerts_store import acknowledge_alert, list_alerts
 from app.services.firestore import is_firestore_dependency_error
 from app.services.sensor_anomaly import detect_intelligent_alerts
-from app.services.sensor_realtime import process_new_sensor_event
+from app.services.sensor_realtime import process_new_command_event, process_new_sensor_event
 
 router = APIRouter()
 WEBHOOK_SECRET_HEADER = "X-AquaMonitor-Webhook-Secret"
@@ -100,5 +101,23 @@ async def sensor_event_webhook(
     try:
         result = process_new_sensor_event(payload.model_dump())
         return result
+    except Exception as exc:
+        _raise_firestore_dependency_error(exc)
+
+
+@router.post("/command-event", response_model=SensorEventProcessResponse)
+async def command_event_webhook(
+    payload: CommandEventIn,
+    x_aquamonitor_webhook_secret: str | None = Header(
+        default=None,
+        alias=WEBHOOK_SECRET_HEADER,
+    ),
+):
+    """
+    Endpoint chamado pela Cloud Function quando um doc novo for criado em 'comandos'.
+    """
+    _validate_sensor_event_secret(x_aquamonitor_webhook_secret)
+    try:
+        return process_new_command_event(payload.model_dump())
     except Exception as exc:
         _raise_firestore_dependency_error(exc)

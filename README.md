@@ -16,6 +16,7 @@ Fluxo principal:
 ```text
 ESP32 -> Firestore REST -> colecao sensores
 Firestore sensores -> Firebase Function -> Backend /alerts/sensor-event
+Firestore comandos -> Firebase Function -> Backend /alerts/command-event
 ESP32 <- MQTT bomba/controle <- Frontend
 Frontend -> Firestore client SDK -> dados em tempo real
 Frontend -> FastAPI -> agente IA, chat, relatorios e alertas
@@ -99,6 +100,7 @@ Rotas principais:
 - `GET /alerts?period=7d&status=open&severity=warning`: consulta de alertas persistidos.
 - `PATCH /alerts/{alert_id}/ack`: marca um alerta persistido como reconhecido.
 - `POST /alerts/sensor-event`: webhook para novo evento de sensor.
+- `POST /alerts/command-event`: webhook para novo evento de comando/estado da bomba.
 
 Camadas:
 
@@ -141,6 +143,20 @@ python -m compileall app tests
 ```
 
 Os testes atuais cobrem contrato de schema, autenticacao do webhook, idempotencia e falha operacional do Firestore com mocks locais. Eles nao exigem credenciais reais do Firestore.
+
+### Seed seguro para integracao Firestore
+
+O script `backend/scripts/seed_integration_firestore.py` cria dados controlados e idempotentes para validacao de integracao. Por padrao, ele usa colecoes de teste (`integration_test_sensores` e `integration_test_comandos`) e identifica todos os documentos com `source=integration_test` e `test_run_id`.
+
+```bash
+cd backend
+source .venv/bin/activate
+python scripts/seed_integration_firestore.py --dry-run --test-run-id codex-dryrun
+python scripts/seed_integration_firestore.py --test-run-id codex-integracao
+python scripts/seed_integration_firestore.py --cleanup --test-run-id codex-integracao
+```
+
+Para validar gatilhos reais nas colecoes operacionais `sensores` e `comandos`, use `--operational` conscientemente e remova somente os documentos do mesmo `test_run_id`. Nunca limpe colecoes inteiras.
 
 ### Variaveis de ambiente do backend
 
@@ -217,7 +233,7 @@ Para Gemini, preencha no backend:
 ```text
 LLM_PROVIDER=gemini
 GEMINI_API_KEY=<sua-chave-do-Google-AI-Studio>
-GEMINI_MODEL=gemini-2.5-flash
+GEMINI_MODEL=gemini-3.6-flash
 ```
 
 O endpoint `POST /agent` monta contexto estruturado a partir de Firestore antes de chamar o modelo. Por padrao, `AGENT_RESPONSE_MODE=hybrid`: o backend tenta usar o LLM configurado e, se o provedor estiver indisponivel, retorna uma resposta deterministica com `fallback_used=true` e `llm_error` preenchido. Use `AGENT_RESPONSE_MODE=llm` e `AGENT_ALLOW_DETERMINISTIC_FALLBACK=0` quando quiser falhar explicitamente sem fallback.
@@ -334,6 +350,12 @@ sudo snap install android-studio --classic
 
 Depois de instalar o Android Studio, configure o Android SDK, uma imagem de emulador e aceite as licencas pelo proprio Android Studio.
 
+### Home, Firestore realtime e nivel visual
+
+A Home usa um listener da colecao `sensores` com `orderBy("timestamp", "desc")` e limite de eventos recentes. Snapshot vazio e tratado como Firestore conectado, nao como erro. O status global diferencia `conectando`, `conectado`, `offline/cache` e `erro`, sem usar `.info/connected` do Realtime Database.
+
+O campo "Ultimo Sensor Alterado" mostra sensor, evento, estado operacional derivado e data/hora em `pt-BR`. O nivel cilindrico e uma estimativa visual calculada pelo timestamp do ultimo evento e parametros centralizados: nivel baixo em 20%, piso de esvaziamento em 21%, enchimento visual em 480s e esvaziamento visual em 480s. Durante enchimento sem confirmacao do sensor alto, a visualizacao fica limitada a 99% e exibe "Aguardando confirmacao do sensor alto". Essa animacao nao cria documentos no Firestore e nao e usada para calculo de consumo.
+
 ## Firmware
 
 O firmware fica em `firmware/TCC.ino/` e possui duas variantes:
@@ -419,7 +441,7 @@ Uso atual:
 - Firestore `chat_sessions`: sessoes e mensagens do chat no backend.
 - Firestore `sensor_event_processing`: controle tecnico de processamento idempotente por evento.
 - Firestore `alerts`: alertas padronizados com `event_id`, `type`, `severity`, `status`, causas possiveis e metadados.
-- Firestore `filling_cycles`: ciclos validos `baixo subiu -> alto subiu` com `fill_time_seconds`.
+- Firestore `filling_cycles`: ciclos validos de enchimento com inicio preferencial em bomba aplicada/confirmada como ligada, fallback em `baixo desceu` e fim em `alto subiu`.
 - MQTT `bomba/controle`: comandos texto legados.
 - MQTT `bomba/controle/v2`: comandos JSON versionados enviados pelo app.
 - MQTT `bomba/estado`: status lido pelo app quando publicado.
@@ -444,15 +466,17 @@ O webhook `POST /alerts/sensor-event` aceita o payload legado do firmware e o pa
 
 Quando `SENSOR_EVENT_WEBHOOK_SECRET` estiver definido no backend, a chamada deve enviar o header `X-AquaMonitor-Webhook-Secret`. O backend usa `event_id`, `raw_path` ou `document_id` como chave idempotente e registra o processamento em `sensor_event_processing`.
 
+O webhook `POST /alerts/command-event` recebe documentos da colecao `comandos` e usa o mesmo segredo compartilhado. O payload inclui `command_id`, estado solicitado, estado aplicado, confirmacao, prioridade e sobreposicao. Comandos com `applied=true`, `confirmed=true` e `applied_state=true` iniciam preferencialmente um ciclo de enchimento; comandos nao aplicados, nao confirmados ou sobrepostos ficam auditados, mas nao entram como inicio de ciclo nem no calculo de energia.
+
 As colecoes tecnicas `sensor_event_processing`, `alerts` e `filling_cycles` sao criadas automaticamente pelo Firestore no primeiro documento gravado com credenciais Firebase Admin validas. Se a credencial estiver invalida ou indisponivel, as rotas de alertas retornam `503` em vez de aguardar o retry longo padrao do SDK. A consulta `GET /alerts` busca por periodo e filtra `status`/`severity` no backend para nao depender de indice composto do Firestore durante o desenvolvimento local.
 
 Depois da idempotencia, o backend aplica regras deterministicas antes de qualquer analise temporal. Eventos com alerta bloqueante, como duplicidade, timestamp ausente, fora de ordem, repeticao suspeita do sensor baixo ou esvaziamento rapido demais, nao alimentam ciclos nem a analise de tempo de enchimento.
 
-O ciclo de enchimento persistido considera `baixo subiu` como inicio e `alto subiu` como fim. O campo `fill_time_seconds` alimenta a analise temporal de enchimento, que retorna `insufficient_data` com poucos ciclos e gera alertas como `slow_fill_cycle`, `persistent_fill_time_shift` ou `new_fill_time_cluster` quando a duracao fica fora da linha de base.
+O ciclo de enchimento persistido considera como inicio preferencial o comando/estado da bomba aplicado e confirmado como ligada. Quando essa confirmacao nao existir, o backend usa `baixo desceu` como fallback de inicio automatico. O fim do ciclo e `alto subiu`, representando reservatorio cheio. O campo `fill_time_seconds` alimenta a analise temporal de enchimento, que retorna `insufficient_data` com poucos ciclos e gera alertas como `slow_fill_cycle`, `persistent_fill_time_shift` ou `new_fill_time_cluster` quando a duracao fica fora da linha de base.
 
 ## Firebase Functions
 
-A pasta `functions/` contem a Function `onSensorCreated`, implementada com Firebase Functions v2 em TypeScript. Ela escuta `sensores/{docId}`, converte o documento Firestore para o contrato enriquecido de evento de sensor e chama `POST /alerts/sensor-event`.
+A pasta `functions/` contem as Functions `onSensorCreated` e `onCommandCreated`, implementadas com Firebase Functions v2 em TypeScript. A primeira escuta `sensores/{docId}`, converte o documento Firestore para o contrato enriquecido de evento de sensor e chama `POST /alerts/sensor-event`. A segunda escuta `comandos/{docId}`, converte o documento para o contrato de comando/estado da bomba e chama `POST /alerts/command-event`.
 
 Runtime e configuracao local:
 
@@ -468,6 +492,7 @@ Variaveis usadas pela Function:
 
 ```text
 BACKEND_SENSOR_EVENT_URL
+BACKEND_COMMAND_EVENT_URL
 SENSOR_EVENT_WEBHOOK_SECRET
 FUNCTION_REGION
 ```

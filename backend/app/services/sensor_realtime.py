@@ -4,6 +4,7 @@ from typing import Any, Dict, List
 
 from .alerts_store import save_alerts
 from .autocloud_fill_time import analyze_fill_time_cycle
+from .energy import fetch_recent_pump_command_events_before
 from .filling_cycles import FillingCycleTracker, save_filling_cycle
 from .firestore import fetch_recent_sensor_events_before, is_firestore_dependency_error
 from .sensor_event_processing import (
@@ -24,7 +25,7 @@ class SensorRealtimeEngine:
     A ordem e intencional:
     1. regras deterministicas;
     2. persistencia deduplicada de alertas;
-    3. extracao de ciclo baixo subiu -> alto subiu;
+    3. extracao de ciclo por bomba confirmada ou fallback baixo desceu -> alto subiu;
     4. analise temporal de fill_time_seconds.
     """
 
@@ -38,6 +39,7 @@ class SensorRealtimeEngine:
         self,
         event: Dict[str, Any],
         history: List[Dict[str, Any]] | None = None,
+        command_history: List[Dict[str, Any]] | None = None,
     ) -> Dict[str, Any]:
         with self.lock:
             context_history = self._context_history(event, history or [])
@@ -51,8 +53,12 @@ class SensorRealtimeEngine:
             }
 
             cycle_tracker = self.cycle_tracker
-            if history:
-                cycle_tracker = _build_cycle_tracker_from_history(context_history)
+            if history or command_history:
+                cycle_tracker = _build_cycle_tracker_from_history(
+                    context_history,
+                    command_history or [],
+                )
+                _merge_runtime_command_starts(cycle_tracker, self.cycle_tracker, event)
 
             historical_cycles = list(cycle_tracker.completed_cycles)
             if blocks_cycle:
@@ -84,6 +90,19 @@ class SensorRealtimeEngine:
             "alerts_created": alerts_created,
             "cycle_created": cycle_created,
             "autocloud": _public_autocloud_result(autocloud_result),
+        }
+
+    def process_command_event(self, event: Dict[str, Any]) -> Dict[str, Any]:
+        with self.lock:
+            self.cycle_tracker.process_command_event(event)
+
+        return {
+            "alerts_created": [],
+            "cycle_created": None,
+            "autocloud": {
+                "used": False,
+                "reason": "command_event_processed",
+            },
         }
 
     def _remember_event(self, event: Dict[str, Any]) -> None:
@@ -145,10 +164,65 @@ def process_new_sensor_event(event: Dict[str, Any]) -> Dict[str, Any]:
             event_with_identity,
             limit=_engine.max_history_events,
         )
+        command_history = fetch_recent_pump_command_events_before(
+            event_with_identity,
+            limit=_engine.max_history_events,
+        )
         engine_result = _engine.process_event(
             event_with_identity,
             history=persisted_history,
+            command_history=command_history,
         )
+        result = {
+            "processed": True,
+            "duplicate": False,
+            "event_id": reservation.event_id,
+            "processing_key": reservation.processing_key,
+            "processing_status": "processed",
+            "payload_hash_mismatch": False,
+            "alerts_created": engine_result.get("alerts_created") or [],
+            "cycle_created": engine_result.get("cycle_created"),
+            "autocloud": engine_result.get("autocloud") or {},
+        }
+        mark_sensor_event_processed(reservation, result)
+        return result
+    except Exception as exc:
+        if not is_firestore_dependency_error(exc):
+            try:
+                mark_sensor_event_failed(reservation, exc)
+            except Exception:
+                pass
+        raise
+
+
+def process_new_command_event(event: Dict[str, Any]) -> Dict[str, Any]:
+    reservation = reserve_sensor_event_processing(event)
+
+    if reservation.duplicate:
+        return {
+            "processed": False,
+            "duplicate": True,
+            "event_id": reservation.event_id,
+            "processing_key": reservation.processing_key,
+            "processing_status": reservation.existing_status,
+            "payload_hash_mismatch": reservation.payload_hash_mismatch,
+            "alerts_created": [],
+            "cycle_created": None,
+            "autocloud": {
+                "used": False,
+                "reason": "duplicate_event",
+            },
+        }
+
+    event_with_identity = {
+        **event,
+        "event_id": reservation.event_id,
+        "processing_key": reservation.processing_key,
+        "event_type": "command",
+    }
+
+    try:
+        engine_result = _engine.process_command_event(event_with_identity)
         result = {
             "processed": True,
             "duplicate": False,
@@ -177,15 +251,42 @@ def _public_autocloud_result(result: Dict[str, Any]) -> Dict[str, Any]:
 
 def _build_cycle_tracker_from_history(
     history: List[Dict[str, Any]],
+    command_history: List[Dict[str, Any]] | None = None,
 ) -> FillingCycleTracker:
     tracker = FillingCycleTracker()
     validated_history: List[Dict[str, Any]] = []
+    timeline: List[Dict[str, Any]] = []
+    for item in command_history or []:
+        timeline.append({**item, "event_type": "command"})
     for item in history:
+        timeline.append({**item, "event_type": "sensor"})
+
+    timeline.sort(key=lambda item: _history_sort_key(item))
+
+    for item in timeline:
+        if item.get("event_type") == "command":
+            tracker.process_command_event(item)
+            continue
+
         alerts = evaluate_sensor_event_rules(item, validated_history)
         if not event_blocks_cycle_processing(alerts):
             tracker.process_event(item)
         validated_history.append(item)
     return tracker
+
+
+def _merge_runtime_command_starts(
+    target: FillingCycleTracker,
+    source: FillingCycleTracker,
+    current_event: Dict[str, Any],
+) -> None:
+    current_ts = _normalize_datetime(current_event.get("timestamp"))
+    for device_key, pending in source.pending_start_by_device.items():
+        if pending.get("event_type") != "command":
+            continue
+        pending_ts = _normalize_datetime(pending.get("timestamp"))
+        if current_ts is None or pending_ts is None or pending_ts <= current_ts:
+            target.pending_start_by_device[device_key] = pending
 
 
 def _history_key(event: Dict[str, Any]) -> str:

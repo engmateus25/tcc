@@ -256,7 +256,7 @@ class GeminiProvider(LLMProvider):
     provider_name = "gemini"
 
     def __init__(self):
-        self.model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+        self.model = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
         self.base_url = os.getenv(
             "GEMINI_BASE_URL",
             "https://generativelanguage.googleapis.com/v1beta",

@@ -141,6 +141,85 @@ class SensorEventIn(BaseModel):
         return value.astimezone(timezone.utc)
 
 
+class CommandEventIn(BaseModel):
+    timestamp: datetime = Field(default_factory=utc_now)
+    document_id: Optional[str] = None
+    event_id: Optional[str] = None
+    command_id: Optional[str] = None
+    device_id: Optional[str] = None
+    source: Optional[str] = None
+    raw_path: Optional[str] = None
+    received_at: Optional[datetime] = None
+    bomba: Optional[str] = None
+    acionamento: Optional[str] = None
+    requested_state: Optional[bool] = None
+    applied_state: Optional[bool] = None
+    applied: Optional[bool] = None
+    confirmed: Optional[bool] = None
+    state_changed: Optional[bool] = None
+    priority: Optional[str] = None
+    overridden_by: Optional[str] = None
+    reason: Optional[str] = None
+    timestamp_missing: bool = False
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_command_payload(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            normalized = dict(data)
+            normalized["timestamp_missing"] = not bool(normalized.get("timestamp"))
+            return normalized
+        return data
+
+    @field_validator(
+        "document_id",
+        "event_id",
+        "command_id",
+        "device_id",
+        "source",
+        "raw_path",
+        "bomba",
+        "acionamento",
+        "priority",
+        "overridden_by",
+        "reason",
+        mode="before",
+    )
+    @classmethod
+    def normalize_command_text(cls, value: Any) -> Optional[str]:
+        return SensorEventIn.normalize_optional_text(value)
+
+    @field_validator(
+        "requested_state",
+        "applied_state",
+        "applied",
+        "confirmed",
+        "state_changed",
+        mode="before",
+    )
+    @classmethod
+    def normalize_bool(cls, value: Any) -> Optional[bool]:
+        if value is None or isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            text = value.strip().lower()
+            if text in ("true", "1", "yes", "sim", "ligar", "ligada", "on"):
+                return True
+            if text in ("false", "0", "no", "nao", "não", "desligar", "desligada", "off"):
+                return False
+        return value
+
+    @field_validator("timestamp", mode="before")
+    @classmethod
+    def default_missing_command_timestamp(cls, value: Any) -> Any:
+        return value or utc_now()
+
+    @field_validator("timestamp", "received_at")
+    @classmethod
+    def normalize_command_datetime(cls, value: Optional[datetime]) -> Optional[datetime]:
+        return SensorEventIn.normalize_datetime(value)
+
+
 class SensorEventProcessResponse(BaseModel):
     processed: bool
     duplicate: bool

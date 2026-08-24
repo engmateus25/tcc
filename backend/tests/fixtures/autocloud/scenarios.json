@@ -1,0 +1,214 @@
+{
+  "schema_version": 1,
+  "device_id": "esp32-reservatorio-01",
+  "generated_for": "autocloud_and_cycle_regression_tests",
+  "cycles": {
+    "insufficient_data": {
+      "history_seconds": [470, 490],
+      "current_seconds": 480
+    },
+    "normal_baseline": {
+      "history_seconds": [470, 480, 485, 490, 475],
+      "current_seconds": 482
+    },
+    "abrupt_slow": {
+      "history_seconds": [470, 480, 485, 490, 475],
+      "current_seconds": 900
+    },
+    "gradual_degradation": {
+      "history_seconds": [480, 500, 520, 540, 600, 660],
+      "current_seconds": 720
+    }
+  },
+  "sensor_events": {
+    "duplicate": [
+      {
+        "event_id": "sensores/dup-1",
+        "sensor": "baixo",
+        "estado": "desceu",
+        "timestamp": "2026-08-24T12:00:00Z",
+        "device_id": "esp32-reservatorio-01",
+        "source": "integration_test"
+      },
+      {
+        "event_id": "sensores/dup-2",
+        "sensor": "baixo",
+        "estado": "desceu",
+        "timestamp": "2026-08-24T12:00:03Z",
+        "device_id": "esp32-reservatorio-01",
+        "source": "integration_test"
+      }
+    ],
+    "out_of_order": [
+      {
+        "event_id": "sensores/order-1",
+        "sensor": "baixo",
+        "estado": "subiu",
+        "timestamp": "2026-08-24T12:00:12Z",
+        "device_id": "esp32-reservatorio-01",
+        "source": "integration_test"
+      },
+      {
+        "event_id": "sensores/order-2",
+        "sensor": "alto",
+        "estado": "subiu",
+        "timestamp": "2026-08-24T12:00:08Z",
+        "device_id": "esp32-reservatorio-01",
+        "source": "integration_test"
+      }
+    ],
+    "missing_timestamp": [
+      {
+        "event_id": "sensores/missing-1",
+        "sensor": "baixo",
+        "estado": "subiu",
+        "device_id": "esp32-reservatorio-01",
+        "source": "integration_test"
+      }
+    ],
+    "unexpected_low_repeat": [
+      {
+        "event_id": "sensores/low-repeat-1",
+        "sensor": "baixo",
+        "estado": "desceu",
+        "timestamp": "2026-08-24T12:00:00Z",
+        "device_id": "esp32-reservatorio-01",
+        "source": "integration_test"
+      },
+      {
+        "event_id": "sensores/low-repeat-2",
+        "sensor": "baixo",
+        "estado": "desceu",
+        "timestamp": "2026-08-24T12:00:20Z",
+        "device_id": "esp32-reservatorio-01",
+        "source": "integration_test"
+      }
+    ],
+    "unexpected_high_without_low": [
+      {
+        "event_id": "sensores/high-no-low-1",
+        "sensor": "baixo",
+        "estado": "desceu",
+        "timestamp": "2026-08-24T12:00:00Z",
+        "device_id": "esp32-reservatorio-01",
+        "source": "integration_test"
+      },
+      {
+        "event_id": "sensores/high-no-low-2",
+        "sensor": "alto",
+        "estado": "subiu",
+        "timestamp": "2026-08-24T12:08:00Z",
+        "device_id": "esp32-reservatorio-01",
+        "source": "integration_test"
+      }
+    ],
+    "implausible_drain": [
+      {
+        "event_id": "sensores/drain-1",
+        "sensor": "alto",
+        "estado": "subiu",
+        "timestamp": "2026-08-24T12:00:00Z",
+        "device_id": "esp32-reservatorio-01",
+        "source": "integration_test"
+      },
+      {
+        "event_id": "sensores/drain-2",
+        "sensor": "baixo",
+        "estado": "desceu",
+        "timestamp": "2026-08-24T12:00:30Z",
+        "device_id": "esp32-reservatorio-01",
+        "source": "integration_test"
+      }
+    ],
+    "valid_cycle_with_sensor_fallback": [
+      {
+        "event_id": "sensores/fallback-start",
+        "sensor": "baixo",
+        "estado": "desceu",
+        "timestamp": "2026-08-24T12:00:00Z",
+        "device_id": "esp32-reservatorio-01",
+        "source": "integration_test"
+      },
+      {
+        "event_id": "sensores/fallback-end",
+        "sensor": "alto",
+        "estado": "subiu",
+        "timestamp": "2026-08-24T12:08:00Z",
+        "device_id": "esp32-reservatorio-01",
+        "source": "integration_test"
+      }
+    ]
+  },
+  "command_events": {
+    "requested_not_applied": {
+      "event_id": "comandos/not-applied",
+      "command_id": "not-applied",
+      "timestamp": "2026-08-24T12:00:00Z",
+      "device_id": "esp32-reservatorio-01",
+      "source": "integration_test",
+      "requested_state": true,
+      "applied_state": false,
+      "applied": false,
+      "confirmed": true,
+      "priority": "fisico",
+      "overridden_by": "fisico",
+      "reason": "comando remoto sobreposto por acionamento fisico"
+    },
+    "applied_unconfirmed": {
+      "event_id": "comandos/unconfirmed",
+      "command_id": "unconfirmed",
+      "timestamp": "2026-08-24T12:00:00Z",
+      "device_id": "esp32-reservatorio-01",
+      "source": "integration_test",
+      "requested_state": true,
+      "applied_state": true,
+      "applied": true,
+      "confirmed": false,
+      "priority": "remoto",
+      "overridden_by": "",
+      "reason": "status pin nao confirmou"
+    },
+    "overridden_by_priority": {
+      "event_id": "comandos/overridden",
+      "command_id": "overridden",
+      "timestamp": "2026-08-24T12:00:00Z",
+      "device_id": "esp32-reservatorio-01",
+      "source": "integration_test",
+      "requested_state": false,
+      "applied_state": true,
+      "applied": false,
+      "confirmed": true,
+      "priority": "fisico",
+      "overridden_by": "fisico",
+      "reason": "automatico sobreposto por prioridade"
+    },
+    "valid_confirmed_start": {
+      "event_id": "comandos/valid-start",
+      "command_id": "valid-start",
+      "timestamp": "2026-08-24T12:00:00Z",
+      "device_id": "esp32-reservatorio-01",
+      "source": "integration_test",
+      "requested_state": true,
+      "applied_state": true,
+      "applied": true,
+      "confirmed": true,
+      "priority": "remoto",
+      "overridden_by": "",
+      "reason": "mqtt ligar"
+    },
+    "restart_during_cycle": {
+      "event_id": "comandos/restart-start",
+      "command_id": "restart-start",
+      "timestamp": "2026-08-24T12:00:00Z",
+      "device_id": "esp32-reservatorio-01",
+      "source": "integration_test",
+      "requested_state": true,
+      "applied_state": true,
+      "applied": true,
+      "confirmed": true,
+      "priority": "automatico",
+      "overridden_by": "",
+      "reason": "boot apos reinicio"
+    }
+  }
+}

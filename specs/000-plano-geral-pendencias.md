@@ -143,7 +143,7 @@ Validacao apos ATV-001:
 - `backend/app/services/llm.py` possui fachada `LLMProvider` para Ollama, Gemini e OpenAI.
 - `backend/app/services/agent_langchain.py` usa contexto estruturado e a fachada LLM, mantendo fallback deterministico visivel.
 - O provider configuravel (`LLM_PROVIDER`) afeta `/llm/chat` e `/agent`; requests tambem podem enviar override opcional de provider.
-- Gemini foi implementado via REST com `GEMINI_API_KEY` no backend e `GEMINI_MODEL=gemini-2.5-flash`.
+- Gemini foi implementado via REST com `GEMINI_API_KEY` no backend e `GEMINI_MODEL=gemini-3.6-flash`.
 - Timeout, indisponibilidade, quota, erro de autenticacao, fallback visivel, modelo respondente e metadata sao tratados de forma uniforme nos providers.
 - Modelo local recomendado: `qwen3:4b-instruct`; a maquina atual ainda precisa instalar Ollama antes do pull.
 
@@ -431,12 +431,12 @@ Motivo: o app ja exibe os alertas persistidos. O proximo passo mais seguro e est
 ### ATV-009 - Extrair e validar ciclos de enchimento
 
 - ID da atividade: `ATV-009`.
-- Titulo: Ciclos validos de enchimento baixo -> alto.
+- Titulo: Ciclos validos de enchimento por bomba confirmada e sensores baixo -> alto.
 - Pendencias relacionadas: AutoCloud temporal, consumo de agua, relatorios.
 - Objetivo: transformar eventos confiaveis em ciclos com duracao de enchimento.
 - Contexto encontrado no codigo: AutoCloud atual nao trabalha com ciclos; consumo de agua e energia sao mocks.
 - Situacao atual: implementada localmente.
-- Proposta de solucao: parear `baixo subiu` indicando inicio do trecho medido de enchimento com `alto subiu` indicando fim, validar ordem, timestamp, duplicidade e anomalias logicas antes de persistir ciclo.
+- Proposta de solucao: iniciar o ciclo preferencialmente pelo comando/estado da bomba aplicado e confirmado como ligada; quando essa confirmacao nao existir, usar `baixo desceu` como fallback temporal de inicio. O fim do ciclo permanece `alto subiu`. Validar ordem, timestamp, duplicidade e anomalias logicas antes de persistir ciclo.
 - Backend afetado: servico de ciclos, Firestore service.
 - Frontend afetado: historico e relatorios no futuro.
 - Firmware afetado: nenhum direto.
@@ -457,12 +457,12 @@ Motivo: o app ja exibe os alertas persistidos. O proximo passo mais seguro e est
 
 - Dependencias: `ATV-008`.
 - Riscos: sem estado inicial, primeiro ciclo pode ser incompleto; eventos fora de ordem exigem reprocessamento.
-- Perguntas pendentes: confirmacao fisica em bancada ainda e desejavel, mas pelo firmware atual `baixo desceu` liga a bomba e `baixo subiu` representa a agua chegando ao sensor baixo; por isso o ciclo baixo -> alto usa `baixo subiu`.
+- Perguntas pendentes: confirmacao fisica em bancada ainda e desejavel para calibrar tempos minimos e volumes reais, mas a semantica de inicio do ciclo ja foi consolidada: comando confirmado da bomba ligada, com fallback em `baixo desceu`.
 - Criterios de aceite: ciclo completo valido persiste duracao; ciclo com evento invalido nao persiste como valido.
 - Plano de testes: ciclo completo, baixo duplicado, alto sem baixo, baixo sem alto, timestamp ausente, fora de ordem.
 - Arquivos provavelmente afetados: `backend/app/services/filling_cycles.py`, `backend/app/services/sensor_realtime.py`, `backend/tests/*`, `README.md`.
-- Status: AGUARDANDO VALIDACAO.
-- Resultado da validacao local: criado `filling_cycles.py` com extracao pura de ciclos, tracker em tempo real e persistencia deduplicada em `filling_cycles`. Testes cobrem ciclo completo `baixo subiu -> alto subiu`, evento invalido que nao alimenta ciclo e duracao negativa/fora de ordem rejeitada.
+- Status: IMPLEMENTADO.
+- Resultado da validacao local: criado `filling_cycles.py` com extracao pura de ciclos, tracker em tempo real e persistencia deduplicada em `filling_cycles`. A auditoria de integracao de 2026-08-24 corrigiu a semantica canonica: o inicio preferencial do ciclo e comando/estado da bomba aplicado e confirmado como ligada; quando nao houver confirmacao confiavel da bomba, `baixo desceu` e usado como fallback de inicio. O fim permanece `alto subiu`. Testes cobrem ciclo por comando confirmado, fallback por sensor baixo, evento invalido que nao alimenta ciclo e duracao negativa/fora de ordem rejeitada.
 - Resultado da validacao do usuario: _a preencher_.
 
 ### ATV-010 - Integrar AutoCloud a analise temporal de enchimento
@@ -749,8 +749,8 @@ Motivo: o app ja exibe os alertas persistidos. O proximo passo mais seguro e est
 - Criterios de aceite: `LLM_PROVIDER=gemini` responde; chave ausente retorna erro claro; limite/quota tratado; frontend nao recebe chave.
 - Plano de testes: mock HTTP/SDK para sucesso, timeout, 401, 429, fallback aprovado/desativado.
 - Arquivos provavelmente afetados: `backend/app/services/llm.py`, `backend/requirements.txt`, `backend/.env.example`, `README.md`.
-- Status: AGUARDANDO VALIDACAO.
-- Resultado da validacao local: `GeminiProvider` foi implementado via REST da Gemini API usando `GEMINI_API_KEY` somente no backend, header `x-goog-api-key`, `GEMINI_MODEL=gemini-2.5-flash`, timeout configuravel, tratamento de 401/403, 429, 5xx e metadata de uso. Nao foi adicionado SDK novo ao `requirements.txt` porque `requests` ja atende ao contrato. Testes mockados cobrem sucesso, chave ausente e quota. Nao houve chamada real por ausencia de chave.
+- Status: IMPLEMENTADO.
+- Resultado da validacao local: `GeminiProvider` foi implementado via REST da Gemini API usando `GEMINI_API_KEY` somente no backend, header `x-goog-api-key`, `GEMINI_MODEL=gemini-3.6-flash`, timeout configuravel, tratamento de 401/403, 429, 5xx e metadata de uso. Nao foi adicionado SDK novo ao `requirements.txt` porque `requests` ja atende ao contrato. Testes mockados cobrem sucesso, chave ausente e quota. Na auditoria de 2026-08-24, a chamada real mostrou que `gemini-2.5-flash` retorna `404` para novos usuarios; a lista de modelos da API recomendou `gemini-3.6-flash`, que passou a ser o default documentado.
 - Resultado da validacao do usuario: _a preencher_.
 
 ### ATV-021 - Selecionar e configurar segundo modelo Ollama
@@ -831,7 +831,7 @@ Motivo: o app ja exibe os alertas persistidos. O proximo passo mais seguro e est
 - Pendencias relacionadas: mobile, Capacitor, backend URL, HTTPS, downloads, notificacoes, MQTT.
 - Objetivo: gerar e testar uma primeira versao Android sem recriar plataforma existente.
 - Contexto encontrado no codigo: Capacitor instalado; `capacitor.config.ts` tem `appId` generico; nao ha `frontend/android`.
-- Situacao atual: plataforma Android criada e sincronizada; validacao em emulador/dispositivo depende do ambiente Android local.
+- Situacao atual: plataforma Android criada, sincronizada e validada pelo usuario em dispositivo fisico via USB.
 - Proposta de solucao: apos build frontend estabilizado, adicionar Android se aprovado, configurar appId/nome, URLs por ambiente, permissoes de rede e estrategia de download.
 - Backend afetado: CORS/HTTPS e URL publica.
 - Frontend afetado: Capacitor config, download de relatorios, notificacoes futuras.
@@ -844,9 +844,9 @@ Motivo: o app ja exibe os alertas persistidos. O proximo passo mais seguro e est
 - Criterios de aceite: `npx cap add android` apenas se pasta nao existir e com aprovacao; build sincronizado; app abre em emulador/dispositivo.
 - Plano de testes: build frontend, `npx cap sync android`, abrir Android Studio, testar rede, download, MQTT.
 - Arquivos provavelmente afetados: `frontend/capacitor.config.ts`, `frontend/android/*` se aprovado, `README.md`.
-- Status: AGUARDANDO VALIDACAO.
+- Status: CONCLUIDO.
 - Resultado da validacao local: `@capacitor/android` foi instalado na versao `7.2.0`, `frontend/capacitor.config.ts` passou a usar `appId=br.com.aquamonitor.app`, `appName=AquaMonitor` e `webDir=dist`, e a pasta `frontend/android/` foi criada com `npx cap add android`. O fluxo `npm run android:sync` passou, incluindo build web e `cap sync android`; `npx cap doctor android` tambem passou para as dependencias Capacitor. O manifesto Android recebeu `android:usesCleartextTraffic="true"` para testes locais contra backend HTTP na rede. A maquina possui `adb`, mas nao possui `java`, `gradle`, `sdkmanager`, `emulator` nem comando do Android Studio no PATH; `./gradlew tasks` falhou com `JAVA_HOME is not set`, entao a abertura/compilacao em emulador ou dispositivo fisico ficou pendente de instalacao do JDK/Android Studio.
-- Resultado da validacao do usuario: _a preencher_.
+- Resultado da validacao do usuario: o aplicativo Android foi compilado com Capacitor, instalado por USB em dispositivo fisico e abriu/executou corretamente.
 
 ## Matriz de testes obrigatorios
 
@@ -887,14 +887,14 @@ Motivo: o app ja exibe os alertas persistidos. O proximo passo mais seguro e est
 - Definir potencia da bomba em kW e preco da energia por kWh.
 - Aprovar se alertas serao lidos diretamente do Firestore pelo frontend ou via backend.
 - Aprovar se dados reais do sistema podem ser enviados ao Gemini/OpenAI ou somente a Ollama local.
-- Validar `GEMINI_API_KEY` real e quota/latencia do `gemini-2.5-flash`.
+- Validar `GEMINI_API_KEY` real e quota/latencia do `gemini-3.6-flash`.
 - Instalar Ollama e baixar `qwen3:4b-instruct` para validacao local.
 - Definir o `appId` Android definitivo; a ATV-024 adicionou a plataforma com `br.com.aquamonitor.app` como identificador provisorio.
 
 ## Perguntas objetivas pendentes
 
 1. Qual e o identificador desejado do ESP32 (`device_id`)?
-2. O inicio de enchimento deve ser considerado em `baixo desceu` ou `baixo subiu` no contrato do TCC?
+2. Qual e o tempo minimo esperado entre `baixo desceu`, `baixo subiu` e `alto subiu` para separar ciclo real de evento fisicamente impossivel?
 3. Qual e o tempo minimo fisicamente plausivel para a caixa ir de sensor alto para sensor baixo?
 4. Qual e o volume em litros entre o sensor baixo e o sensor alto?
 5. Qual tarifa de agua deve ser usada: valor por m3, por litro, tarifa fixa ou faixa?
@@ -947,7 +947,7 @@ Motivo: o app ja exibe os alertas persistidos. O proximo passo mais seguro e est
 - `POST /alerts/sensor-event` com backend local: retornou `503 Service Unavailable` claro quando a credencial Firebase Admin atual falhou.
 - Apos corrigir a credencial Firebase Admin, `GET /alerts?period=7d&status=open&limit=5` com backend local retornou `200 OK` e alertas abertos reais sem exigir indice composto Firestore.
 - Preflight CORS de `http://localhost:5173` para `GET /alerts` retornou `200 OK` com `access-control-allow-origin: http://localhost:5173`.
-- Sequencia validada via `POST /alerts/sensor-event`: `baixo desceu` seguido de `alto subiu` retornou `alerts_created` com `unexpected_high_without_low`.
+- Sequencia validada via `POST /alerts/sensor-event`: `baixo desceu` seguido diretamente de `alto subiu`, sem a confirmacao coerente do sensor baixo, retornou `alerts_created` com `unexpected_high_without_low`; esse alerta bloqueia a alimentacao do ciclo/AutoCloud para o evento invalido.
 - `cd frontend && npm exec tsc -- --noEmit`: passou.
 - `cd frontend && npm run lint`: passou com 6 avisos nao bloqueantes de `react-refresh/only-export-components`.
 - `cd frontend && npm run build`: passou com avisos nao bloqueantes de Browserslist/Baseline desatualizados e chunks acima de 500 kB.

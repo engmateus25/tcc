@@ -7,8 +7,8 @@ import pytest
 from fastapi import HTTPException
 from pydantic import ValidationError
 
-from app.routers.alerts import sensor_event_webhook
-from app.schemas.dto import SensorEventIn
+from app.routers.alerts import command_event_webhook, sensor_event_webhook
+from app.schemas.dto import CommandEventIn, SensorEventIn
 from app.services.sensor_event_processing import (
     SensorEventReservation,
     build_event_identity,
@@ -175,3 +175,51 @@ def test_duplicate_event_is_not_processed_again(engine_mock, reserve_mock):
     assert result["duplicate"] is True
     assert result["processed"] is False
     engine_mock.process_event.assert_not_called()
+
+
+@patch.dict(os.environ, {"SENSOR_EVENT_WEBHOOK_SECRET": "secret"}, clear=False)
+@patch("app.routers.alerts.process_new_command_event")
+def test_command_endpoint_accepts_valid_secret(process_mock, valid_response):
+    process_mock.return_value = valid_response
+
+    response = asyncio.run(
+        command_event_webhook(
+            CommandEventIn(
+                document_id="cmd-doc-1",
+                event_id="comandos/cmd-doc-1",
+                command_id="cmd-1",
+                timestamp="2026-07-27T12:00:00Z",
+                requested_state=True,
+                applied_state=True,
+                applied=True,
+                confirmed=True,
+                source="firestore_on_create",
+                raw_path="comandos/cmd-doc-1",
+            ),
+            x_aquamonitor_webhook_secret="secret",
+        )
+    )
+
+    assert response["event_id"] == "sensores/doc-1"
+    process_mock.assert_called_once()
+
+
+@patch.dict(os.environ, {"SENSOR_EVENT_WEBHOOK_SECRET": "secret"}, clear=False)
+@patch("app.routers.alerts.process_new_command_event")
+def test_command_endpoint_rejects_wrong_secret(process_mock):
+    with pytest.raises(HTTPException) as raised:
+        asyncio.run(
+            command_event_webhook(
+                CommandEventIn(
+                    command_id="cmd-1",
+                    timestamp="2026-07-27T12:00:00Z",
+                    applied_state=True,
+                    applied=True,
+                    confirmed=True,
+                ),
+                x_aquamonitor_webhook_secret="wrong",
+            )
+        )
+
+    assert raised.value.status_code == 401
+    process_mock.assert_not_called()

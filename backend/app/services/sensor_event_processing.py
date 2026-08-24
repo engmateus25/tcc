@@ -56,6 +56,15 @@ def build_payload_hash(event: Dict[str, Any]) -> str:
             "device_id",
             "source",
             "raw_path",
+            "command_id",
+            "requested_state",
+            "applied_state",
+            "applied",
+            "confirmed",
+            "state_changed",
+            "priority",
+            "overridden_by",
+            "reason",
         )
         if event.get(key) is not None
     }
@@ -102,6 +111,11 @@ def reserve_sensor_event_processing(event: Dict[str, Any]) -> SensorEventReserva
         "raw_path": event.get("raw_path"),
         "sensor": event.get("sensor"),
         "estado": event.get("estado"),
+        "command_id": event.get("command_id"),
+        "requested_state": event.get("requested_state"),
+        "applied_state": event.get("applied_state"),
+        "applied": event.get("applied"),
+        "confirmed": event.get("confirmed"),
         "device_id": event.get("device_id"),
         "source": event.get("source"),
         "event_timestamp": event.get("timestamp"),

@@ -78,7 +78,7 @@ def test_agent_hybrid_uses_llm_with_structured_context(monkeypatch):
         captured["provider_name"] = provider_name
         return "Resposta melhorada pelo modelo.", {
             "provider": "gemini",
-            "model": "gemini-2.5-flash",
+            "model": "gemini-3.6-flash",
             "usage": {"promptTokenCount": 100},
         }
 
@@ -91,7 +91,7 @@ def test_agent_hybrid_uses_llm_with_structured_context(monkeypatch):
 
     assert result.answer == "Resposta melhorada pelo modelo."
     assert result.provider == "gemini"
-    assert result.model == "gemini-2.5-flash"
+    assert result.model == "gemini-3.6-flash"
     assert result.fallback_used is False
     assert captured["provider_name"] == "gemini"
     assert "Contexto estruturado" in captured["messages"][1].content
@@ -134,7 +134,7 @@ def test_agent_endpoint_returns_session_and_model_metadata(monkeypatch):
             answer="ok",
             intent=AquaIntent(kind="smalltalk"),
             provider="gemini",
-            model="gemini-2.5-flash",
+            model="gemini-3.6-flash",
         ),
     )
 
@@ -143,7 +143,7 @@ def test_agent_endpoint_returns_session_and_model_metadata(monkeypatch):
     assert response.answer == "ok"
     assert response.session_id == "session-1"
     assert response.provider == "gemini"
-    assert response.model == "gemini-2.5-flash"
+    assert response.model == "gemini-3.6-flash"
 
 
 def test_agent_endpoint_maps_llm_provider_error(monkeypatch):
@@ -155,7 +155,7 @@ def test_agent_endpoint_maps_llm_provider_error(monkeypatch):
         raise LLMProviderError(
             "GEMINI_API_KEY nao configurada",
             provider="gemini",
-            model="gemini-2.5-flash",
+            model="gemini-3.6-flash",
             status_code=503,
         )
 

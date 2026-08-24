@@ -18,9 +18,13 @@ export function HomePage() {
 
   const {
     waterLevel,
+    reservoirStatus,
+    waitingForHighConfirmation,
     isPumpOn,
     pumpMode,
     lastSensor,
+    firebaseStatus,
+    firebaseError,
     pendingPumpCommand,
     pumpStatusMessage,
     togglePump,
@@ -62,15 +66,22 @@ export function HomePage() {
         <div className="flex justify-center">
           <WaterTankVisualization waterLevel={waterLevel} />
         </div>
+        <div className="mt-4 text-center">
+          <p className="text-sm text-slate-700">{reservoirStatus}</p>
+          {waitingForHighConfirmation && (
+            <p className="mt-1 text-xs text-amber-600">
+              A estimativa visual está limitada até confirmação do sensor alto.
+            </p>
+          )}
+        </div>
       </div>
 
       {/* Grid de Informações */}
       <div className="grid grid-cols-1 gap-4 mb-6">
         {/* Status do Sensor */}
         <SensorStatus
-          sensorName={lastSensor.name}
-          action={lastSensor.action}
-          time={lastSensor.time}
+          sensor={lastSensor}
+          connectionLabel={firebaseStatusLabel(firebaseStatus, firebaseError)}
         />
 
         {/* Grid 2 colunas para Controle e Modo */}
@@ -115,4 +126,12 @@ export function HomePage() {
       </div>
     </>
   );
+}
+
+function firebaseStatusLabel(status: string, error?: string | null) {
+  if (status === "connecting") return "Conectando ao Firestore...";
+  if (status === "connected") return "Firestore conectado, sem eventos no período consultado.";
+  if (status === "offline") return "Firestore usando cache/offline.";
+  if (status === "error") return error || "Erro no listener do Firestore.";
+  return "Aguardando leitura do Firestore.";
 }

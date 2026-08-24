@@ -1,11 +1,19 @@
 // Tipos para o sistema de monitoramento de água
 
 export type PumpMode = "automático" | "manual mqtt" | "manual chave";
+export type FirebaseConnectionStatus =
+  | "connecting"
+  | "connected"
+  | "offline"
+  | "error";
 
 export type LastSensor = {
   name: string;
   action: "subiu" | "desceu";
-  time: string; // HH:mm:ss
+  date: string;
+  time: string;
+  dateTime: string;
+  operationalState: string;
 };
 
 // --- abaixo, faça pequenos ajustes para reutilizar os tipos recém-criados ---

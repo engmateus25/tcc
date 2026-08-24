@@ -1,4 +1,5 @@
 import {
+  COMMAND_EVENT_SOURCE,
   SENSOR_EVENT_SECRET_HEADER,
   SENSOR_EVENT_SOURCE,
 } from "./config";
@@ -28,6 +29,27 @@ export type SensorEventPayload = {
   received_at: string;
 };
 
+export type CommandEventPayload = {
+  document_id: string;
+  event_id: string;
+  command_id: unknown | null;
+  timestamp: string;
+  device_id: unknown | null;
+  source: string;
+  raw_path: string;
+  received_at: string;
+  bomba: unknown | null;
+  acionamento: unknown | null;
+  requested_state: unknown | null;
+  applied_state: unknown | null;
+  applied: unknown | null;
+  confirmed: unknown | null;
+  state_changed: unknown | null;
+  priority: unknown | null;
+  overridden_by: unknown | null;
+  reason: unknown | null;
+};
+
 export function buildSensorEventPayload(
   snapshot: FirestoreSnapshotLike,
   documentId: string,
@@ -51,6 +73,42 @@ export function buildSensorEventPayload(
     source: SENSOR_EVENT_SOURCE,
     raw_path: rawPath,
     received_at: receivedAt.toISOString(),
+  };
+}
+
+export function buildCommandEventPayload(
+  snapshot: FirestoreSnapshotLike,
+  documentId: string,
+  receivedAt = new Date(),
+): CommandEventPayload | null {
+  const data = snapshot.data();
+  if (!data) {
+    return null;
+  }
+
+  const rawPath = snapshot.ref?.path || `comandos/${documentId}`;
+  const commandId = data.command_id || documentId;
+  const eventId = normalizeString(data.event_id) || rawPath;
+
+  return {
+    document_id: documentId,
+    event_id: eventId,
+    command_id: commandId,
+    timestamp: normalizeTimestamp(data.timestamp || data.applied_at || data.created_at, receivedAt),
+    device_id: data.device_id || null,
+    source: COMMAND_EVENT_SOURCE,
+    raw_path: rawPath,
+    received_at: receivedAt.toISOString(),
+    bomba: data.bomba || null,
+    acionamento: data.acionamento || null,
+    requested_state: data.requested_state ?? null,
+    applied_state: data.applied_state ?? data.pump_on ?? null,
+    applied: data.applied ?? data.state_changed ?? null,
+    confirmed: data.confirmed ?? null,
+    state_changed: data.state_changed ?? null,
+    priority: data.priority || null,
+    overridden_by: data.overridden_by || null,
+    reason: data.reason || null,
   };
 }
 

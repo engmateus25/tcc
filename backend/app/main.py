@@ -11,6 +11,8 @@ from app.tasks.scheduler import start_scheduler_if_enabled
 load_dotenv()
 
 DEFAULT_CORS_ORIGINS = [
+    "https://localhost",
+    "http://localhost",
     "http://localhost:8100",
     "https://localhost:8100",
     "http://localhost:5173",
