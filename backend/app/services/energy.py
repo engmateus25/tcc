@@ -209,10 +209,22 @@ def normalize_pump_event(
     if pump_on is None:
         pump_on = _parse_pump_state_from_text(data.get("bomba") or data.get("state"))
 
-    confirmed = _read_optional_bool(data.get("confirmed"))
-    applied = _read_optional_bool(data.get("applied"))
-    if applied is None:
-        applied = _read_optional_bool(data.get("state_changed"))
+    confirmed_raw = _read_optional_bool(data.get("confirmed"))
+    applied_raw = _read_optional_bool(data.get("applied"))
+    state_changed_raw = _read_optional_bool(data.get("state_changed"))
+    if applied_raw is None:
+        applied_raw = state_changed_raw
+
+    has_state_value = pump_on is not None and any(
+        key in data for key in ("applied_state", "pump_on", "bomba", "state")
+    )
+    applied = bool(applied_raw) if applied_raw is not None else has_state_value
+    confirmed = bool(confirmed_raw) if confirmed_raw is not None else applied
+    state_changed = (
+        bool(state_changed_raw)
+        if state_changed_raw is not None
+        else has_state_value
+    )
 
     return {
         "id": data.get("id") or doc_id,
@@ -221,9 +233,9 @@ def normalize_pump_event(
         "pump_on": pump_on,
         "requested_state": _read_optional_bool(data.get("requested_state")),
         "applied_state": pump_on,
-        "confirmed": bool(confirmed),
-        "applied": bool(applied),
-        "state_changed": bool(_read_optional_bool(data.get("state_changed"))),
+        "confirmed": confirmed,
+        "applied": applied,
+        "state_changed": state_changed,
         "source": data.get("source") or data.get("acionamento") or "unknown",
         "priority": data.get("priority"),
         "overridden_by": data.get("overridden_by"),

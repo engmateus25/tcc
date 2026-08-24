@@ -59,3 +59,18 @@ def test_normalize_pump_event_reads_extended_command_contract():
     assert normalized["confirmed"] is True
     assert normalized["applied"] is False
     assert normalized["overridden_by"] == "físico"
+
+
+def test_normalize_pump_event_treats_legacy_text_as_applied():
+    normalized = normalize_pump_event(
+        {
+            "timestamp": BASE,
+            "bomba": "bomba ligar",
+        },
+        doc_id="legacy-doc",
+    )
+
+    assert normalized["pump_on"] is True
+    assert normalized["confirmed"] is True
+    assert normalized["applied"] is True
+    assert normalized["state_changed"] is True

@@ -4,9 +4,10 @@ from typing import Any, Dict, Iterable, List
 
 from firebase_admin import firestore
 
-from .filling_cycles import FILLING_CYCLES_COLLECTION
+from .filling_cycles import FILLING_CYCLES_COLLECTION, extract_filling_cycles
 from .firestore import (
     _get_period_range,
+    fetch_sensor_events,
     _init_firebase_admin_once,
     firestore_operation_timeout_seconds,
 )
@@ -50,8 +51,22 @@ def fetch_filling_cycles(period: str) -> List[Dict[str, Any]]:
     return cycles
 
 
-def get_consumption_summary(period: str = "7d") -> Dict[str, Any]:
-    return build_consumption_summary(fetch_filling_cycles(period), period=period)
+def get_consumption_summary(
+    period: str = "7d",
+    *,
+    sensor_events: Iterable[Dict[str, Any]] | None = None,
+) -> Dict[str, Any]:
+    cycles = fetch_filling_cycles(period)
+    basis = "valid_filling_cycles"
+
+    if not cycles:
+        events = list(sensor_events) if sensor_events is not None else fetch_sensor_events(period)
+        cycles = extract_filling_cycles(events)
+        basis = "sensor_events_fallback"
+
+    summary = build_consumption_summary(cycles, period=period)
+    summary["basis"] = basis
+    return summary
 
 
 def build_consumption_summary(
