@@ -1,485 +1,463 @@
-Você confirma que concluiu a construção de todas tasks planejadas? Se sim, agora entramos na etapa de auditoria, integração e validação funcional. O aplicativo Android já foi compilado com Capacitor, instalado por USB em um dispositivo físico e está abrindo e executando corretamente.
+Esse meu projeto de TCC também é um PIBITI (projeto de extensão e ensino), nele eu já fizum relatório parcial um tempo atráz, numa época qu o projeto estava no meio do desenvolvimento, hoje ele já está praticamente finalizado (mas como já chegou o prazo final de envio de relatório, tem-se que descrever o projeto como finalizado, parte física em laboratório, case 3D, chatboot assistente, alertasdeterminísticos e com autocloud, aplicação web/mobile convertida para android ficando pendente iOS....). Eu estou usando o chatgpt para fazer a escrita, ele já tem a janela de contexto com o padrão e modelo de relatório que eu quero. Então, eu quero de vc (agente codex) o seguinte: observe abaixo os pedidos do meu professor orientador sobre o atual estado do meu relatório final, precisarei mecher em resumo, metodologia, resultados e coclusão. Do relatório parcial para cá, eu já alterei apenas Metodologia e Conclusão, osoutros tópicos continuam com o texto do relatório parcial. 
 
-Lembre de seguir `AGENTS.md`, a documentação do projeto, os arquivos de planejamento/atividades e o estado atual do código. Use também como referência a documentação técnica já produzida para o TCC, mas não considere a documentação como prova de que uma funcionalidade está realmente funcionando.
+Observações do meu professororientador:
+a) Resumo e abstract precisam ser atualizados conforme os resultados finais (eles ainda estão com a descrição da proposta de desenvolvimento do projeto);
 
-## 1. Auditoria do planejamento existente
+b) Metodologia: falta  explanar com mais detalhes como as ações são feitas; aplicação web, assistente de linguagem natural, autocloud,alertas determinísticos e com autocloud, etc... as informações estão muito rasas;
 
-Antes de alterar o código, faça um levantamento de todas as atividades previstas no planejamento anterior.
+c) Resultados:  inserir os resultados finais e olhar se ainda existe qualquer tipo de situação onde você menciona resultados parciais; apresentar as informações de maneira quantitativa;
 
-O Android já foi validado pelo usuário em dispositivo físico via USB. Atualize o registro da ATV-024 com essa informação, sem executar novamente `npx cap add android` e sem recriar `frontend/android/`.
+d) Conclusão: falta falar das informações mais quantitativas;
 
-Depois do levantamento, prossiga diretamente com as correções e implementações abaixo. Não pare apenas para pedir confirmação, salvo se existir um bloqueio externo incontornável.
+e) Ler o pdf por completo para identificar qualquer tipo de divergência
 
-## 2. Autorização para configuração e testes
 
-Você está autorizado, dentro do escopo deste projeto, a:
 
-* inspecionar e ajustar arquivos `.env`;
-* verificar as configurações do frontend, backend, Firebase, MQTT e provedores LLM;
-* usar as credenciais reais já configuradas para implementações e testes;
-* consultar o Firestore;
-* realizar requisições reais às APIs;
-* criar dados controlados de teste no Firebase;
-* corrigir variáveis de ambiente e contratos de integração;
-* reiniciar os serviços necessários;
-* executar testes locais e de integração.
+Então eu quero que vc invstigue dentro do projeto em documentação, codigos pertinentes, etc... As informações úteis para o desenvolvimento dos tópicos de interesse. Então vc vai investigar e deixar num .md as informações pertinentes para a complementação dos tópicoscque faltam, esse .md serácde alimentação para o chatgpt desenvolver o texto em latex. Também,eu quero que em outro arquivo, vc mesmo faça as incrementações nos tópicos de interesse, produzindo os textos e desixas umas estrutura mostada com sugestão de imagem onde vc achar que convém por imagem.
 
-Não solicite autorização individual para cada variável já existente.
 
-Apesar dessa autorização:
 
-* não inclua segredos em commits;
-* não mova chaves de backend para variáveis `VITE_*`;
-* preserve `.env` no `.gitignore`;
-* identifique dados de teste com `source`, `test_run_id` ou campos equivalentes;
+Abaixo deixo as seções de interesse do meu PIBITI, as seções de introdução e fundamentação teórica não precisam de alterações, logo, não as envio aqui.
 
-## 3. Corrigir a integração Firestore da Home
 
-O histórico está consultando corretamente os eventos da coleção `sensores`: os filtros retornam dados compatíveis com o Firestore. Entretanto, na Home:
+Resumo:
 
-* o campo “Último sensor alterado” não atualiza;
-* o status global do Firebase aparece sempre como desconectado;
-* o MQTT aparece corretamente como conectado.
+A operação do abastecimento de água em condomínios depende de reservatórios, bombas e dispositivos de comando e proteção que precisam funcionar de forma contínua e segura. Entretanto, em muitos cenários, a supervisão do sistema ainda ocorre de maneira reativa, com pouca rastreabilidade e sem histórico confiável de eventos, o que dificulta o diagnóstico de falhas, aumenta custos de manutenção e pode favorecer desperdícios. Este relatório parcial apresenta o desenvolvimento de um sistema inteligente de baixo custo para monitorar e apoiar a gestão do abastecimento hídrico, integrando sensoriamento embarcado, comunicação por MQTT/HTTP, armazenamento em nuvem e aplicação \textit{web} para visualização em tempo quase real, histórico e controle remoto com validação por regras. Como resultados parciais, obteve-se um protótipo funcional em laboratório, com registro de comandos e eventos de sensores em banco de dados, telas de monitoramento e histórico com indicadores e gráficos, além da integração de um assistente em linguagem natural e da implementação inicial do módulo AutoCloud e de regras físicas por sequência de eventos para apoiar alertas. Foram observadas limitações relacionadas à instabilidade de rede, que podem ocasionar perda de eventos ou falhas de acionamento remoto. A continuidade do projeto inclui aprimorar a robustez da comunicação, finalizar a integração de alertas, realizar testes controlados de detecção de anomalias, solidificar a versão \textit{mobile} do app e avançar para implantação em condomínio real.
 
-Investigue e corrija a causa raiz.
 
-Use como referência o mesmo cliente Firestore, projeto, coleção, normalização de documento e contrato que já funcionam na tela de histórico. O projeto utiliza Cloud Firestore, não Realtime Database. Portanto, não utilize mecanismos como `.info/connected`, específicos do Realtime Database.
+ \textbf{Palavras-chave}:  monitoramento; IoT; abastecimento hídrico; detecção de anomalias; manutenção preditiva; \textit{dashboard}.
 
-Verifique especialmente:
 
-* inicialização duplicada ou divergente do Firebase;
-* variáveis `VITE_FIREBASE_*`;
-* nome e caminho da coleção `sensores`;
-* consultas `orderBy`, `limit` e índices;
-* campo usado como timestamp;
-* conversão de `Timestamp`, string ISO e valores legados;
-* listeners `onSnapshot`;
-* tratamento de erros;
-* cancelamento do listener;
-* estado compartilhado entre as telas;
-* regras do Firestore;
-* diferenças entre o bundle web e o Android;
-* configuração copiada para `dist` e para os assets Android.
 
-Crie ou centralize um serviço/hook de Firestore reutilizável. A Home e o indicador global (presente no canto inferior da tela) devem utilizar a mesma fonte de conexão e os mesmos contratos usados pelo histórico.
 
-O status de conexão deve possuir comportamento coerente:
 
-* `conectando` enquanto o primeiro snapshot não chega;
-* `conectado` quando o listener recebe um snapshot válido, mesmo que vazio;
-* `offline` quando houver ausência real de rede ou uso somente de cache;
-* `erro/desconectado` quando o listener falhar.
 
-Não represente “sem documentos” como “Firebase desconectado”.
 
-## 4. Melhorar o campo “Último sensor alterado”
 
-Além de corrigir a atualização em tempo real, exiba:
+\chapter{Metodologia}
 
-* nome do sensor;
-* evento: `subiu` ou `desceu`;
-* data;
-* horário;
-* estado operacional derivado, como `Enchendo`, `Esvaziando`, `Cheio` ou `Nível baixo`.
+\section{Etapas de desenvolvimento}
 
-Use formatação `pt-BR` e trate corretamente timestamps UTC.
+A metodologia adotada para o desenvolvimento do sistema inteligente é organizada
+em etapas, de modo a garantir e validação progressiva dos componentes, antes da integração completa do sistema. Inicialmente, realiza-se a revisão bibliográfica e o levantamento dos requisitos relacionados ao monitoramento de reservatórios, à comunicação entre dispositivos IoT, ao armazenamento de eventos e à detecção de anomalias. Em seguida, monta-se um protótipo em laboratório para representar o funcionamento elétrico de um sistema de bombeamento predial em condições controladas.
 
-Exemplo visual:
+Em seguida, o desenvolvimento do módulo embarcado baseado no ESP32, responsável pela leitura das boias de nível, sinalização do estado do reservatório, acionamento da bomba e transmissão dos eventos. Posteriormente, a implementação da comunicação MQTT, a persistência no Cloud Firestore, o \textit{backend} em FastAPI e a aplicação \textit{web}. A aplicação é então convertida para \textit{mobile} em sistema \textit{Android} por meio da ferramenta Capacitor, mantendo a mesma base de código da versão web.
 
-```text
-Sensor alto — subiu
-Reservatório cheio
-24/08/2026 às 14:32:10
-```
+Por fim, são incorporados o processamento dos ciclos de enchimento, as regras de consistência física, o AutoCloud e o assistente chatbot com LLM. A validação final é conduzida em bancada didática em laboratório, utilizando boias reais movimentadas manualmente para reproduzir as transições de nível.
 
-Não derive “enchendo” ou “esvaziando” apenas de um texto isolado. Considere a sequência dos sensores e, quando disponível, o estado confirmado da bomba.
+\section{Arquitetura do sistema}
 
-Adicione testes para:
+O sistema inteligente foi desenvolvido como uma arquitetura modular composta por quatro partes principais: módulo embarcado, serviços de comunicação e persistência, \textit{backend} de processamento e aplicação \textit{web/mobile}. Essa separação permite que a aquisição dos sinais físicos continue independente da interface, enquanto o processamento histórico e os recursos de inteligência são concentrados no \textit{backend}.
 
-* snapshot vazio;
-* evento com `Timestamp` do Firestore;
-* evento com string ISO;
-* evento legado;
-* erro no listener;
-* mudança em tempo real;
-* formatação da data;
-* estado operacional derivado.
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1.0\linewidth]{figs/Diagrama em blocos TCC.png}
+    \caption{Diagrama em blocos do sistema.}
+    \legend{Fonte: O autor.}
+    \label{fig:diagrama_blocos_sistema}
+\end{figure}
 
-## 5. Animação do reservatório
+Conforme apresentado na Figura~\ref{fig:diagrama_blocos_sistema}, o ESP32 realiza a leitura das boias e o acionamento da bomba. Os eventos são armazenados no Cloud Firestore e os comandos em tempo real são trocados por MQTT. Uma função Firebase é executada quando um novo documento de sensor é criado e encaminha o evento ao \textit{backend} FastAPI. O \textit{backend} aplica as regras de negócio, organiza os ciclos de enchimento, gera alertas e fornece os dados utilizados pelos relatórios e pelo assistente de IA. A aplicação consulta esses serviços para apresentar o estado do reservatório, o histórico, as estimativas operacionais e os alertas ao usuário.
 
-A visualização cilíndrica da Home deve representar uma estimativa visual contínua do nível.
+\section{Construção do módulo embarcado}
 
-Parâmetros iniciais sugeridos:
+O módulo embarcado foi construído com um ESP32, duas boias de nível, um módulo de relés, três sinalizadores luminosos e uma chave seletora de acionamento físico. Após a validação inicial em protoboard, os componentes foram instalados em placa perfurada e acomodados em uma caixa produzida por impressão 3D. Os sinalizadores e a chave seletora foram fixados na tampa para permitir a visualização do nível e o comando local da bomba.
 
-```text
-nível mínimo do sensor baixo: 20%
-nível máximo: 100%
-piso visual durante esvaziamento: 21%
-tempo esperado de enchimento: 480 segundos
-tempo visual esperado de esvaziamento: 480 segundos
-velocidade de enchimento: 10 pontos percentuais por minuto
-```
+As duas boias representam os limites inferior e superior do reservatório. A combinação de seus estados permite classificar o nível como baixo, médio ou alto. O estado intermediário ocorre quando a boia inferior indica que a água ultrapassou o nível baixo, enquanto a boia superior ainda permanece desacionada. Os sinalizadores verde, amarelo e vermelho representam, respectivamente, os níveis de reservatório baixo, médio e alto.
 
-Comportamento desejado:
+\begin{table}[H]
+    \centering
+    \caption{Conexões utilizadas no módulo embarcado.}
+    \label{tab:pinos_esp32}
+    \small
+    \begin{tabular}{|l|c|p{8.0cm}|}
+        \hline
+        \textbf{Elemento} & \textbf{Pino} & \textbf{Função} \\ \hline
+        Boia de nível baixo & GPIO 18 & Detectar as transições associadas ao limite inferior. \\ \hline
+        Boia de nível alto & GPIO 21 & Detectar as transições associadas ao limite superior. \\ \hline
+        Acionamento da bomba & GPIO 22 & Comandar o relé responsável pelo acionamento. \\ \hline
+        Retorno de estado da bomba & GPIO 23 & Confirmar o estado físico após o comando. \\ \hline
+        Chave seletora & GPIO 25 & Forçar localmente a bomba a ligar ou desligar. \\ \hline
+        Sinalização de nível baixo & GPIO 32 & Acionar o sinalizador verde. \\ \hline
+        Sinalização de nível médio & GPIO 19 & Acionar o sinalizador amarelo. \\ \hline
+        Sinalização de nível alto & GPIO 33 & Acionar o sinalizador vermelho. \\ \hline
+    \end{tabular}
+    \legend{Fonte: O autor.}
+\end{table}
 
-1. Ao ocorrer o evento que indica nível baixo e início do enchimento, o reservatório deve partir de aproximadamente 20%.
-2. Durante o enchimento, deve avançar progressivamente até 100% em aproximadamente oito minutos.
-3. Quando o sensor alto confirmar `subiu`, deve mostrar 100% e estado cheio.
-4. Quando o sensor alto indicar `desceu`, deve iniciar a animação de esvaziamento.
-5. O esvaziamento deve ir de 100% até aproximadamente 21% em oito minutos.
-6. Ao atingir 21%, deve permanecer nesse nível até ocorrer o evento real de nível baixo.
-7. O evento real do sensor baixo poderá então colocar o nível em 20% e iniciar um novo enchimento.
+Para reduzir a influência de ruídos nas entradas, cada mudança é confirmada por uma segunda leitura após um intervalo de 15~ms. Caso as duas leituras sejam diferentes, a alteração é descartada. O horário do ESP32 é sincronizado por NTP e os eventos recebem marca temporal em UTC, facilitando a ordenação cronológica no banco de dados.
 
-Prefira calcular o percentual pelo timestamp inicial e pelo tempo decorrido, em vez de incrementar valores com vários timers sujeitos a drift. Preserve o estado após navegação ou recarregamento reconstruindo-o a partir do último evento persistido.
+\section{Monitoramento e controle da bomba}
 
-Durante um enchimento sem confirmação do sensor alto, considere limitar visualmente em 99% e mostrar “Aguardando confirmação do sensor alto”, para não apresentar 100% como fato físico não confirmado.
+O funcionamento do sistema é orientado pelas transições das boias. Quando o nível atinge o limite inferior, é registrado um evento de nível baixo e o controle automático solicita o acionamento da bomba. Durante o enchimento, a liberação da boia inferior caracteriza o nível médio. Quando a boia superior é acionada, o nível alto é registrado e a bomba é desligada automaticamente.
 
-Centralize esses limites em configuração. Você pode propor valores melhores, desde que:
+A atuação foi implementada com a seguinte ordem de prioridade:
 
-* preserve o objetivo visual;
-* não misture a animação com leituras físicas reais;
-* não gere documentos no Firestore somente por causa da animação;
-* documente a decisão adotada.
+\begin{equation}
+    \text{acionamento físico} > \text{comando remoto} > \text{controle automático}.
+\end{equation}
 
-## 6. Consumo estimado de água
+A chave seletora força diretamente a bomba a ligar ou desligar e sobrescreve qualquer solicitação remota ou automática. Quando não há intervenção física, um comando recebido por MQTT prevalece sobre o modo automático. Na ausência dos dois modos anteriores, o acionamento é determinado exclusivamente pelas boias. Essa política evita que comandos concorrentes produzam estados indefinidos.
 
-A tela de histórico aparentemente ainda apresenta valores mocados, embora a documentação afirme que o backend já possui cálculo por ciclos. Audite o código real e remova qualquer valor, série ou gráfico hardcoded.
+Após um comando de ligação, o \textit{firmware} aguarda por até cinco segundos a confirmação no pino de retorno da bomba. No desligamento, também é verificada a mudança do retorno para o estado inativo. O registro diferencia o estado solicitado do estado efetivamente aplicado e informa quando um comando foi impedido por uma prioridade superior. Dessa forma, o histórico não interpreta uma simples solicitação como funcionamento real da bomba.
 
-Como não existe sensor de vazão, o consumo deve ser explicitamente apresentado como estimativa.
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\linewidth]{figs/Fluxograma TCC-convertido-de-svg.png}
+    \caption{Fluxograma de monitoramento do sistema.}
+    \legend{Fonte: O autor.}
+    \label{fig:fluxograma_sistema}
+\end{figure}
 
-Use parâmetros configuráveis, incluindo:
+A Figura~\ref{fig:fluxograma_sistema} sintetiza a leitura das boias, a determinação do nível, a aplicação das prioridades, o acionamento da bomba e o registro dos eventos utilizados pelas etapas posteriores.
 
-```text
-RESERVOIR_VOLUME_BETWEEN_SENSORS_LITERS
-WATER_PRICE_PER_CUBIC_METER_BRL
-```
+\section{Comunicação e persistência dos eventos}
 
-A fonte do cálculo deve ser o backend e os eventos persistidos, não a animação do frontend.
+O MQTT foi utilizado para o envio de comandos e para a confirmação do estado da bomba. O broker público HiveMQ foi configurado no endereço \texttt{broker.hivemq.com}. O ESP32 utiliza a porta 1883, enquanto a aplicação web/mobile estabelece conexão por WebSocket seguro na porta 8884. Os comandos remotos são publicados no tópico \texttt{bomba/controle} e as confirmações são retornadas pelo tópico \texttt{bomba/estado}.
 
-Uma abordagem aceitável é:
+Os eventos das boias e os registros da bomba são enviados ao Cloud Firestore. A comunicação utiliza mensagens em formato JSON, onde cada evento contém, entre outros campos, o sensor, a transição observada, um identificador único, o dispositivo de origem e os horários de criação e envio. Os registros da bomba incluem ainda o estado solicitado, o estado aplicado, a confirmação física e a prioridade que prevaleceu.
 
-```text
-consumo estimado por ciclo = volume útil entre os sensores
-consumo total = quantidade de ciclos válidos × volume útil
-consumo em m³ = litros / 1000
-custo estimado = consumo em m³ × tarifa
-```
+Para reduzir perdas durante falhas de conectividade, foi implementado no ESP32 um buffer circular com capacidade para 32 eventos. Quando o envio ao Firestore falha, o registro é armazenado localmente. Após o restabelecimento da conexão, os eventos pendentes são reenviados em ordem, com novas tentativas a cada cinco segundos. Caso o limite do buffer seja atingido, o evento mais antigo é removido para preservar os registros mais recentes e manter o uso de memória do ESP32 controlado.
 
-Para gráficos temporais, distribua os ciclos pelo período correspondente sem fabricar leituras contínuas inexistentes.
+\section{Processamento no backend e geração de alertas}
 
-Garanta:
+O \textit{backend} foi implementado em Python com FastAPI. Quando um novo documento é criado na coleção \texttt{sensores}, uma Firebase Function encaminha os dados ao endpoint de processamento. O evento é normalizado e reservado por uma chave segura calculada a partir de seu identificador. Assim, uma eventual repetição da Function não provoca a criação duplicada de ciclos ou alertas.
 
-* exclusão de ciclos inválidos;
-* idempotência;
-* ausência de dupla contagem;
-* estados de loading, vazio e erro;
-* indicação textual de que o valor é estimado;
-* integração real da tela de histórico com `/reports/summary`;
-* coerência entre resumo JSON e relatório PDF.
+Em seguida, são aplicadas regras determinísticas baseadas na coerência física e temporal das boias. Entre as situações verificadas estão eventos duplicados em intervalo curto, registros fora de ordem, ausência de horário válido, repetição inesperada da boia inferior e acionamento incoerente da boia superior. Eventos considerados inválidos são registrados para análise, mas não participam do cálculo dos ciclos de enchimento.
 
-## 7. Consumo estimado de energia
+Os dados foram organizados em coleções distintas no Firestore. A coleção \texttt{sensores} armazena as transições das boias, em \texttt{comandos} ficam os acionamentos da bomba, em \texttt{alerts} os alertas gerados, em \texttt{sensor\_event\_processing} o controle de idempotência, em \texttt{filling\_cycles} os ciclos válidos e em \texttt{chat\_sessions} as sessões/histórico do chatbot.
 
-Audite se a estimativa atual está realmente calculada ou apenas mocada.
+\section{Análise temporal com AutoCloud}
 
-O cálculo deve usar somente comandos da bomba com:
+Os ciclos válidos de enchimento são formados entre a transição \texttt{baixo subiu}, que indica que o nível ultrapassou a boia inferior, e a transição \texttt{alto subiu}, correspondente à chegada ao limite superior. O tempo de enchimento é calculado por:
 
-```text
-applied = true
-confirmed = true
-```
+\begin{equation}
+    t_{enchimento} = t_{alto\,subiu} - t_{baixo\,subiu}.
+\end{equation}
 
-Utilize o estado aplicado ou confirmado, e não apenas o comando solicitado. Comandos ignorados, sobrepostos ou sem confirmação devem permanecer na auditoria, mas não devem entrar no tempo ligado.
+O valor obtido é armazenado no Firebase e utilizado como entrada da análise temporal. O AutoCloud compara os ciclos recentes com o histórico de ciclos válidos para identificar tempos de enchimento acima do comportamento habitual, mudanças persistentes e formação de um novo padrão. A análise somente é iniciada após a obtenção da quantidade mínima de amostras configurada. Os alertas indicam anomalias e possíveis causas, como redução da vazão da bomba ou obstrução hidráulica, sem afirmar um diagnóstico definitivo.
 
-Parâmetros:
+\section{Aplicação web e versão Android}
 
-```text
-PUMP_POWER_KW
-ELECTRICITY_PRICE_PER_KWH_BRL
-```
+A interface foi desenvolvida com Ionic, React, TypeScript e Vite. O aplicativo apresenta o nível estimado do reservatório, o estado confirmado da bomba, os alertas, o histórico e as estimativas operacionais. O Firebase Web SDK é utilizado para acompanhar os eventos persistidos, enquanto o MQTT realiza a troca de comandos com o ESP32. As requisições de relatórios, alertas e inteligência artificial são direcionadas ao \textit{backend} FastAPI.
 
-Cálculo esperado:
+A mesma base de código foi adaptada para Android por meio do Capacitor. Após a compilação dos arquivos web, o conteúdo foi sincronizado com o projeto Android e executado no Android Studio. A instalação e a depuração foram realizadas por cabo USB em um aparelho Android. Durante os testes em rede local, a URL do \textit{backend} foi configurada com o endereço IP do computador responsável pela execução da API.
 
-```text
-tempo ligado em horas = total_on_seconds / 3600
-energia em kWh = potência da bomba × tempo ligado
-custo = energia em kWh × tarifa
-```
+\section{Assistente em linguagem natural}
 
-Valide intervalos incompletos, comandos duplicados, eventos fora de ordem, reinicializações e comandos sobrepostos pelas prioridades física, remota e automática.
+O chatbot foi implementado no \textit{backend} para responder perguntas sobre eventos, períodos de nível baixo ou alto, consumo estimado, funcionamento da bomba, alertas, entre outros. Antes de consultar o modelo de linguagem, o sistema identifica a intenção e o período solicitado, consulta os dados estruturados e monta um contexto resumido. Essa separação mantém os cálculos no \textit{backend} e reduz a possibilidade de o modelo produzir valores sem correspondência com o histórico.
 
-Remova mocks do frontend e conecte os cards e gráficos ao backend.
+Foram configuradas duas formas de execução: um modelo local \texttt{qwen3:4b-instruct}, executado por meio do Ollama, e o modelo online \texttt{gemini-3.6-flash}, acessado por API online. Em ambos os casos, o modelo recebe a pergunta acompanhada do contexto produzido pelo sistema.
 
-## 8. Corrigir a definição do ciclo de enchimento
+\section{Procedimento de validação experimental}
 
-Existe uma divergência importante que precisa ser auditada.
+A validação foi realizada em bacada de laboratório, representando o circuito de acionamento do sistema de bombeamento. Foram utilizadas boias reais, porém sem o enchimento físico de um reservatório. As mudanças de nível foram simuladas movimentando manualmente as boias para cima e para baixo, reproduzindo as transições esperadas entre os estados baixo, médio e alto.
 
-A documentação atual informa:
+O procedimento contemplou verificação das entradas das duas boias, conferência da sinalização luminosa, acionamento automático nos limites inferior e superior, acionamento remoto por MQTT, sobrescrita dos modos remoto e automático pela chave seletora, confirmação do estado da bomba, persistência dos eventos, interrupção e restabelecimento da comunicação, visualização das informações na aplicação Android e execução dos módulos de alertas, AutoCloud e chatbot. Essa abordagem permitiu avaliar a integração ponta a ponta em condições controladas, sem afirmar equivalência completa com a operação de um condomínio real.
 
-```text
-início: sensor baixo subiu
-fim: sensor alto subiu
-```
 
-Entretanto, o objetivo funcional é medir o tempo desde o início real do funcionamento da bomba até o reservatório ficar cheio.
 
-Revise o firmware, o contrato da coleção `comandos`, os eventos dos sensores e `filling_cycles.py`. Defina uma semântica canônica e documente-a.
 
-A preferência é:
 
-```text
-início: comando/estado da bomba aplicado e confirmado como ligada
-fim: sensor alto subiu, representando reservatório cheio
-```
 
-Para acionamento automático, o evento `baixo desceu` pode ser usado como fallback de início quando não houver confirmação confiável da bomba. Não utilize silenciosamente `baixo subiu` como início se esse evento ocorrer depois que o enchimento já começou.
 
-Persista no ciclo:
 
-* evento que iniciou o ciclo;
-* origem do início;
-* timestamp de acionamento confirmado;
-* evento final;
-* duração;
-* modo da bomba;
-* identificador do dispositivo;
-* validade;
-* motivo de descarte, quando inválido.
 
-Atualize testes, documentação e cálculos dependentes desse contrato.
 
-## 9. AutoCloud: tempo de enchimento e anomalias
 
-O AutoCloud deve trabalhar sobre ciclos válidos de enchimento e sobre `fill_time_seconds`.
 
-Use 480 segundos como referência inicial configurável, mas permita que a linha de base seja aprendida a partir de ciclos históricos válidos.
 
-O algoritmo deve cobrir pelo menos:
 
-### Caso normal
+    
+\chapter{Resultados}
 
-Tempos próximos de oito minutos, com variação natural, sem geração indevida de alerta.
+\section{Ambiente Experimental em Laboratório}
 
-### Anomalia abrupta
+Os resultados parciais deste trabalho são obtidos em ambiente de laboratório, por meio de um protótipo instrumentado que simula o sistema elétrico de bombeamento utilizado em condomínios. Essa abordagem permite observar o comportamento do sistema, validar a captura de eventos e testar o acionamento sob condições controladas, sem depender de intervenção em infraestrutura real. As Figuras~\ref{fig:lab_painel} e~\ref{fig:lab_visao_geral} apresentam a montagem do experimento e a interligação entre o painel didático, a bancada e os elementos de controle.
 
-Exemplo: histórico próximo de oito minutos seguido por um ciclo de quinze minutos.
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\linewidth]{figs/lab_painel_conexoes.jpg}
+    \caption{Painel e conexões do experimento em laboratório.}
+    \legend{Fonte: O Autor.}
+    \label{fig:lab_painel}
+\end{figure}
 
-Deve gerar alerta de enchimento anormalmente lento ou novo padrão distante.
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\linewidth]{figs/lab_visao_geral.jpg}
+    \caption{Visão geral do ambiente experimental com protótipo em operação.}
+    \legend{Fonte: O Autor.}
+    \label{fig:lab_visao_geral}
+\end{figure}
 
-### Degradação gradual
+A instrumentação utiliza um módulo embarcado conectado a um conjunto de acionamento e sinalização, permitindo registrar estados relevantes e executar o acionamento do sistema conforme regras e permissões. As Figuras~\ref{fig:lab_close_embarcado} e~\ref{fig:lab_operacao_manual} destacam o módulo embarcado e os elementos de apoio utilizados durante a operação e observação do protótipo.
 
-Exemplo:
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\linewidth]{figs/lab_close_embarcado_reles.jpg}
+    \caption{Módulo embarcado e placa de relés utilizados na instrumentação e acionamento.}
+    \legend{Fonte: O Autor.}
+    \label{fig:lab_close_embarcado}
+\end{figure}
 
-```text
-8 min → 9 min → 10 min → 11 min → 12 min
-```
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\linewidth]{figs/lab_operacao_manual.jpg}
+    \caption{Operação e verificação do protótipo durante o experimento em laboratório.}
+    \legend{Fonte: O Autor.}
+    \label{fig:lab_operacao_manual}
+\end{figure}
 
-Deve gerar alerta de tendência persistente de aumento, mesmo que cada ciclo isolado não ultrapasse imediatamente o limiar abrupto.
+\section{Interface \textit{Web} e Monitoramento em Tempo Real}
 
-Revise os parâmetros existentes:
+A aplicação \textit{web} foi implementada para apresentar o estado do sistema de forma simples e acessível, reunindo informações de operação em tempo real e indicadores derivados do histórico. A Figura~\ref{fig:tela_home_nivel} mostra o painel principal, com a visualização do nível do reservatório e o estado da bomba. Nesta etapa do projeto, o valor exibido para volume é estimado, uma medição mais precisa por sensor de vazão e planejada para continuidade do trabalho.
 
-```text
-FILL_TIME_MIN_SAMPLES
-FILL_TIME_SLOW_FACTOR
-FILL_TIME_PERSISTENT_WINDOW
-```
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\linewidth]{figs/web_home_nivel_reservatorio.jpg}
+    \caption{Tela principal da aplicação \textit{web} com nível do reservatório e status operacional.}
+    \legend{Fonte: O Autor.}
+    \label{fig:tela_home_nivel}
+\end{figure}
 
-Você pode sugerir estatísticas ou limiares mais robustos, mas deve justificar e validar com testes. O sistema deve detectar anomalias e apresentar possíveis causas, sem afirmar diagnóstico físico definitivo.
+Além do painel de nível, a interface oferece recursos de controle e informações operacionais adicionais, como modo de acionamento e estimativas relacionadas ao funcionamento. A Figura~\ref{fig:tela_controle_bomba} apresenta o controle da bomba e a indicação do modo de acionamento configurado, além de uma estimativa de consumo energético calculada a partir do tempo de funcionamento e da potência nominal considerada nesta fase do protótipo.
 
-## 10. Fixtures JSON e testes do AutoCloud
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\linewidth]{figs/web_controle_bomba_estimativas.jpg}
+    \caption{Controle da bomba, modo de acionamento e estimativas operacionais na aplicação \textit{web}.}
+    \legend{Fonte: O Autor.}
+    \label{fig:tela_controle_bomba}
+\end{figure}
 
-Crie fixtures JSON versionadas no repositório, preferencialmente em uma estrutura como:
+\section{Histórico e Estatísticas}
 
-```text
-backend/tests/fixtures/autocloud/
-```
+O sistema registra telemetria e eventos em nuvem, permitindo consulta do histórico e geração de estatísticas por período. As Figuras~\ref{fig:historico_cards} e~\ref{fig:historico_grafico_hora} ilustram a tela de histórico e estatísticas, com filtros por período e gráficos que sintetizam consumo de água e estimativas de energia associadas à operação do bombeamento. Esse histórico fornece rastreabilidade e permite observar padrões de uso ao longo do tempo, o que é fundamental para análises posteriores e para suporte a alertas.
 
-Os documentos devem reproduzir os contratos reais do Firestore para:
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\linewidth]{figs/web_historico_cards_periodo.jpg}
+    \caption{Tela de histórico e estatísticas com indicadores e filtros por período.}
+    \legend{Fonte: O Autor.}
+    \label{fig:historico_cards}
+\end{figure}
 
-* coleção `comandos`;
-* coleção `sensores`;
-* ciclos derivados, quando necessário.
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\linewidth]{figs/web_historico_consumo_hora.jpg}
+    \caption{Gráfico de consumo por hora na tela de histórico e estatísticas.}
+    \legend{Fonte: O Autor.}
+    \label{fig:historico_grafico_hora}
+\end{figure}
 
-Inclua identificadores únicos, timestamps UTC, `device_id`, `source`, estado solicitado, estado aplicado, confirmação, prioridade e demais campos reais do contrato.
 
-Cenários mínimos:
+\section{Persistência em Nuvem e Organização do Histórico}
 
-1. dados insuficientes;
-2. cinco ou mais ciclos normais próximos de 480 segundos;
-3. ciclo abrupto de aproximadamente 900 segundos;
-4. progressão de 540, 600, 660 e 720 segundos;
-5. eventos duplicados;
-6. eventos fora de ordem;
-7. timestamp ausente;
-8. repetição inesperada do sensor baixo;
-9. sensor alto sem sequência anterior válida;
-10. esvaziamento fisicamente implausível;
-11. comando solicitado, mas não aplicado;
-12. comando aplicado sem confirmação;
-13. comando sobreposto por prioridade;
-14. ciclo válido com bomba confirmada;
-15. reinício do dispositivo durante um ciclo.
+O acompanhamento do sistema é sustentado por uma estrutura de dados em nuvem organizada por coleções, permitindo registrar comandos, eventos de sensores, dados do módulo de anomalias e interações do assistente. A Figura~\ref{fig:firestore_collections} apresenta a visão do banco de dados, evidenciando quatro coleções principais: \textit{comandos} (acionamentos de liga/desliga com modo e horário), \textit{sensores} (mudanças de estado dos sensores baixo/alto com horário), \textit{autocloud} (informações armazenadas a cada etapa de clusterização/análise) e \textit{chat\_sessions} (perguntas e respostas do chatbot, registradas para aprimoramento).
 
-Crie testes automatizados determinísticos que carreguem esses JSONs sem depender do Firebase remoto. Se os testes demonstrarem falhas no AutoCloud ou nas regras atuais, corrija o algoritmo e adicione testes de regressão.
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.98\linewidth]{figs/firestore_colecoes.jpg}
+    \caption{Estrutura do banco de dados em nuvem com coleções para comandos, sensores, AutoCloud e sessões do chatbot.}
+    \legend{Fonte: O Autor.}
+    \label{fig:firestore_collections}
+\end{figure}
 
-## 11. Testes reais no Firebase
 
-Além das fixtures locais, execute integração real usando as credenciais configuradas.
 
-Preferência:
+\section{Assistente em Linguagem Natural}
 
-1. Firebase Emulator, se estiver configurado;
-2. projeto Firebase de teste;
-3. ambiente remoto atual, somente com dados claramente identificados.
+Como funcionalidade adicional, foi integrada uma interface de chatbot para suporte ao usuário e consulta de informações do sistema em linguagem natural. Nesta etapa, a execução local utiliza um modelo leve via Ollama (\texttt{qwen2:0.5b}), escolhido por limitações de memória no ambiente de desenvolvimento. A Figura~\ref{fig:chatbot_exemplo} mostra um exemplo de consulta e resposta baseada no histórico de eventos, que consiste contagem de ocorrências associadas ao sensor de nível. Para continuidade do projeto, permanece prevista a avaliação com modelos mais robustos e uso de APIs externas, bem como aprimoramentos na estratégia de interpretação de intenção e formatação de respostas com \textit{frameworks} como LangChain.
 
-Crie um script de seed reutilizável, seguro e idempotente, com opção `--dry-run`. Use `test_run_id` e `source=integration_test`.
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\linewidth]{figs/web_chatbot_exemplo.jpg}
+    \caption{Exemplo de consulta ao assistente e resposta baseada no histórico do sistema.}
+    \legend{Fonte: O Autor.}
+    \label{fig:chatbot_exemplo}
+\end{figure}
 
-Para manter uma base remota permanente sem contaminar histórico, consumo e alertas operacionais, utilize coleções de teste ou um namespace próprio. Para validar os gatilhos reais nas coleções operacionais, insira documentos temporários identificados, capture as evidências e remova apenas os documentos criados pelo teste.
+\section{Implementação dos Módulos de Anomalias e Regras Físicas}
 
-Nunca limpe uma coleção inteira.
+Além do monitoramento e do histórico, foram iniciadas implementações voltadas à detecção de anomalias e geração de alertas. A Figura~\ref{fig:codigo_autocloud_regras} apresenta dois trechos relevantes, sendo uma parte do algoritmo matemático do AutoCloud, já integrada ao \textit{backend} para processamento do histórico, e um conjunto de regras físicas baseadas na ordem e consistência da sequência de eventos dos sensores, para detecção de combinações incoerentes entre estados do sensor baixo e do sensor alto, auxiliando em nos alertas inteligentes.
 
-Documente:
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.98\linewidth]{figs/codigo_autocloud_regras.jpg}
+    \caption{Trechos do código: algoritmo do AutoCloud (esquerda) e regras físicas por sequência de eventos dos sensores (direita).}
+    \legend{Fonte: O Autor.}
+    \label{fig:codigo_autocloud_regras}
+\end{figure}
 
-* projeto utilizado;
-* coleções;
-* IDs criados;
-* alertas esperados;
-* alertas efetivamente gerados;
-* ciclos criados;
-* resultado da idempotência;
-* procedimento de limpeza.
+Nesta etapa do relatório parcial, o AutoCloud encontra-se implementado e em evolução, porém ainda carece de mais testes e aprimoramento para avaliação prática do seu desempenho com cenários controlados de falha.
 
-## 12. Processamento automático de sensores e comandos
 
-Atualmente existe `onSensorCreated` para `sensores/{docId}` e o endpoint:
 
-```text
-POST /alerts/sensor-event
-```
 
-Verifique se todos os eventos novos de sensor realmente disparam o processamento automático.
 
-O usuário também precisa que eventos da coleção `comandos` sejam processados automaticamente. Implemente uma solução coerente com a arquitetura existente, por exemplo:
 
-```text
-onCommandCreated
-comandos/{docId}
-POST /alerts/command-event
-```
 
-Você pode optar por um endpoint unificado se isso reduzir duplicação, desde que preserve contratos, compatibilidade e idempotência.
 
-O processamento deve:
+%\begin{table}[h!]
+%\centering
+%\begin{tabular}{|>{\raggedright}m{3cm}|>{\centering\arraybackslash}m{3cm}|>{\centering\arraybackslash}m{3cm}|}
+%\hline
+%\textbf{Tipo de ferramenta} & \textbf{\% Acerto em Setas} & \textbf{\% Acerto em caracteres} \\
+%\hline
+%Resnet + Easyocr & 100 & 89,52 \\
+%\hline
+%Resnet + pytesseract & 100 & 46,77 \\
+%\hline
+%SVM + Easyocr & 18,18 & 89,52 \\
+%\hline
+%SVM + pytesseract & 18,18 & 46,77 \\
+%\hline
+%YOLO + Easyocr & 90,91 & 89,52 \\
+%\hline
+%YOLO + pytesseract & 90,91 & 46,77 \\
+%\hline
+%Tangente + Easyocr & 0 & 89,52 \\
+%\hline
+%Tangente + pytesseract & 0 & 46,77 \\
+%\hline
+%\end{tabular}
+%\caption{Resultados de acerto para diferentes combinações de ferramentas}
+%\label{tab:resultados}
+%\end{table}
 
-* validar o comando;
-* diferenciar estado solicitado e aplicado;
-* considerar confirmação física;
-* respeitar prioridades;
-* atualizar o estado temporal da bomba;
-* correlacionar comandos e sensores;
-* criar ou finalizar ciclos quando aplicável;
-* executar regras de sequência e intervalo;
-* executar AutoCloud somente quando houver um ciclo completo e válido;
-* persistir alertas deduplicados;
-* impedir reprocessamento em retentativas da Function.
 
-Não execute todas as análises cegamente em eventos incompletos. Cada evento deve acionar a API, mas a API deve decidir quais análises são aplicáveis naquele estágio.
+\begin{comment}
 
-Proteja os webhooks com o segredo já existente e adicione testes para segredo ausente, incorreto, correto e evento duplicado.
+\section{Como criar uma definição}
 
-## 13. Validar regras inteligentes existentes
+\begin{defi}
+Uma Topologia sobre o conjunto $X$ é uma família $\tau
+\subset \beta(X)$ que satisfaz $ \mathbb{S} $:
+\begin{enumerate}
+ \item$\emptyset,X$ pertencem a $\tau;$
+ \item Seja  $\{A_{\alpha} \in \tau /\alpha \in \Gamma\}$
+ uma família arbitrária de subconjuntos de  $\tau$ então, a união dos elementos dessa família ainda pertence a  $\tau$, ou seja, $\bigcup \limits_{\alpha \in \Gamma} A_{\alpha}\in\tau;$
+ \item Sejam $B_{1},B_{2},B_{3},..., B_{n} \in \tau$ uma família finita de subconjuntos de $\tau$, com $n \geq 1$, então
+ interseção dessa família ainda pertence a $\tau$, ou seja, $\bigcap\limits_{i=1}^{n} B_{i}\in \tau.$
+\end{enumerate}
+\end{defi}
 
-Revise e teste todas as regras já documentadas:
+\section{Como criar uma observação}
 
-* `missing_timestamp`;
-* `duplicate_event`;
-* `out_of_order_event`;
-* `unexpected_low_repeat`;
-* `implausible_drain_time`;
-* `unexpected_high_without_low`;
-* `low_dropped_while_high_active`;
-* `slow_fill_cycle`;
-* `persistent_fill_time_shift`;
-* `new_fill_time_cluster`.
+\begin{obs}
 
-Para cada uma, confirme:
+\item Os elementos da Topologia  $\tau$ caracterizam os Conjuntos Abertos de $X.$
 
-* sequência que dispara;
-* severidade;
-* mensagem;
-* possíveis causas;
-* se bloqueia ciclo;
-* se bloqueia AutoCloud;
-* deduplicação;
-* persistência;
-* exibição no frontend;
-* reconhecimento pelo usuário.
+\item O par ordenado $(X,\tau)$ é chamado de Espaço Topológico.
 
-Corrija regras contraditórias com a semântica real dos sensores e adicione testes de regressão.
+\item Sim, de fato:
 
-## 14. Testes e validação final
+\item i) $\emptyset, X \in \tau$, pois são subconjuntos de $X;$
 
-Execute, no mínimo:
+\item ii) Seja \{$J_{\lambda}\}_{\lambda\in L}$ temos que$J_{\lambda}\in \tau$ então $\bigcup\limits_{\lambda\in L} J_{\lambda}$ é
+    um subconjunto de $X$ e portanto, pertence a $\tau;$
 
-```bash
-cd backend
-pytest
-python -m compileall app tests
-```
+\item iii) Sejam $J_{1},J_{2},...J_{n} \in \tau$ temos que $J_{1}\bigcap J_{2}\bigcap ...J_{n}$ é um suconjunto de $X$ e portanto pertence a $\tau.$
 
-```bash
-cd functions
-npm run build
-npm test
-```
+\end{obs}
 
-```bash
-cd frontend
-npm run build
-npm run lint
-npm run android:sync
-npx cap doctor android
-```
+\section{Como criar um exemplo}
 
-Também execute:
+\begin{ex}{Topologia Euclidiana ou Usual} - $\tau_{us}$
 
-* testes das fixtures JSON;
-* testes de integração do Firestore;
-* testes dos webhooks;
-* teste do último sensor da Home;
-* teste do indicador de conexão;
-* teste dos cálculos de água;
-* teste dos cálculos de energia;
-* teste do ciclo de enchimento;
-* teste abrupto e gradual do AutoCloud;
-* teste de idempotência;
-* teste dos gráficos e relatório PDF.
+Essa topologia é formada por intervalo do $\mathbb{R}^{n}$
+Os dois tipos mais estudados são a Topologia Euclidiana Usual na Reta (ou  de $\mathbb{R}$) e a Topologia Euclidiana Usual (ou do  no Plano Complexo (ou do $\mathbb{R}^{2}$).
 
-Não altere testes apenas para fazê-los passar. Corrija a implementação ou documente claramente uma mudança intencional de contrato.
+Seja a topologia $\tau = \{A \subset \mathbb{R}\}, \emptyset\}$ onde $X = \mathbb{R}$, dizemos que $A \in \tau$, se e somente se, para todo $y \in A$, existe um intervalo aberto $(c,d)$ tal que
+$y \in (c,d) \subset A.$
 
-## 15. Entrega esperada
+\item i) É fácil notar que $\mathbb{R}, \emptyset \in \tau;$
 
-Ao finalizar, apresente:
+\item ii) Consideremos a família $\{A_{\alpha} \in \tau / \alpha \in\tau\},$
+queremos mostrar que, $\bigcup\limits_{\alpha\in \Gamma} A_{\alpha}\in \tau.$
 
-1. resumo executivo do que estava funcionando;
-2. atividades anteriores realmente concluídas;
-3. pendências encontradas;
-4. causas-raiz dos problemas;
-5. alterações realizadas;
-6. arquivos modificados;
-7. contratos ou variáveis novas;
-8. resultados dos testes, com comandos e contagens;
-9. dados de integração criados no Firebase;
-10. alertas esperados versus encontrados;
-11. decisões adotadas para os limites de nível e duração;
-12. limitações ainda existentes;
-13. checklist curto para validação manual no Android.
+De fato, considerando $y \in \bigcup\limits_{\alpha\in \Gamma} A_{\alpha}$ ,
+desse modo, existe $\alpha_{0} \in \Gamma$ tal que $y \in A_{\alpha_{0}} \in \tau$, assim, existe $(c,d)$ e
+temos que $y\in (c,d) \subset A_{\alpha_{0}}\subset \bigcup\limits_{\alpha\in \Gamma}A_{\alpha}.$
 
-Atualize a documentação técnica para refletir o comportamento efetivamente implementado. Não registre como resultado observado algo que foi somente simulado ou coberto por teste automatizado.
+\item iii) Consideremos $B_{1},B_{2}$ subconjuntos finitos de $\tau$, desse modo
+tomemos $y \in B_{1}\bigcap B_{2}$, assim $y\in B_{1}$ e $y\in B_{2}$,
+logo existem $(c_{1}, d_{1})$ e $(c_{2}, d_{2})$ tais que $y$
+$\in0 (c_{1}, d_{1}) \subset B_{1}$ e $y\in (c_{2}, d_{2}) \subset B_{2}.$
 
+Vamos denotar por $c = max(c_{1},c_{2})$ e $d = min(d_{1},d_{2})$, assim temos:
 
-## OBSERVAÇÕES FINAIS
+\begin{center}
+ $y \in (c,d) \subset B_{1} \bigcap B_{2}$
+\end{center}
+ 
+Por indução temos  se $B_{1},B_{2},..., B_{n}$ são conjuntos finitos de $\tau$, então, $\bigcap\limits_{i=1}^{n}B_{i}\in\tau.$
+\end{ex}
 
-- Você tem liberdade para startar e derrubar via comando local tanto backend, quanto frontend.
-- Faça bateria de testes de possíveis perguntas para o chatbot, vc pode alternar entre ollhama e gemini, as duas já estão inclusas no .env e funcionando.
-Eu quero que vc averigue e garanta a capacidade de adaptação a perguntas e oferta de dicas de ações pelas LLMs do chatbot. Garantindo o poder de interpretação, busca, apresentação de resposta humanizada, sugestão de dicas quando conveniênte, etc... O poder de uma LLM especialista na base de daddos do sistema. Faça tabela de comparações entre as LLMs após os testes.
-- Também, os relatórios gerados ao clicar no botão de download estão muito básicos. Faça eles ficarem mais estilosos, com mais cores, ícones, divisão por linhas e colunas (se conveniente). Quando clico em download no celular, ele baixa no noteboook servidor, tente manter o dowload no celular, se for possível dentro do atual fluxo, se precisar mudar o fluxo, não mexa.
+\section{Como criar um teorema}
+
+\begin{teo}: Seja $(X,\tau)$ um espaço topológico e $ \mathfrak{F}$ a
+família de conjuntos fechados, então:
+\begin{description}
+  \item[i)]$\emptyset, X$ pertencem a $ \mathfrak{F}$;
+  \item[ii)]Considere $F_{1}, F_{2},..., F_{n}$ conjuntos fechados
+  em $X$; então a união finita $\bigcup\limits_{i=1}^{n} F_{i}$ é fechada
+  em $X$;
+  \item[iii)]Considere $\{ F_{\alpha} \in \mathfrak{F} / \alpha \in
+  \Gamma\}$ uma família de elementos arbitrários de $\mathfrak{F}$,
+  então, a interseção arbitrária $\bigcap\limits_{\alpha \in \Gamma}F_{\alpha}$ pertence a $\mathfrak{F}.$
+\end{description}
+\end{teo}
+
+\section{Como criar uma Prova}
+
+ \begin{prova}~
+
+ \item i) $\emptyset$ e $X$ pertencem a $\mathfrak{F}$, pois seus
+   complementares pertencem a $\tau$.
+ \item ii) Se $F_{i}$ é fechado para $i = 1,...,n$. Utilizando a Lei de Morgan, temos:
+   \begin{center}
+   $(\bigcup\limits_{i=1}^{n} F_{i})^{c} = \bigcap\limits_{i=1}^{n} (F_{i})^{c}$
+   \end{center}
+   
+   Como a interseção $(F_{i})^{c}$ é  um aberto, pois, a interseção
+   de conjuntos abertos é aberta, portanto, $\bigcup\limits_{i=1}^{n} F_{i}$ é fechada
+   em $X.$
+  \item iii) Seja $\{F_{\alpha \in \mathfrak{F} / \alpha \in
+   \Gamma}\}$ uma família arbitrária de conjuntos fechados.
+
+  Utilizando a Lei de Morgan, temos:
+   \begin{center}
+   $(\bigcap_{\alpha \in \Gamma} F_{\alpha})_{c} = \bigcup\limits_{\alpha \in
+   \Gamma} F_{\alpha}^{c}$
+   \end{center}
+   
+   Sabemos que $(F_{\alpha})^{c}$ é aberto, assim, a união de
+   conjuntos abertos é aberta, então, podemos concluir que $\bigcap\limits_{\alpha \in
+   \Gamma}F_{\alpha}$ é fechado em $X$.
+ \end{prova}
+\end{comment}
+
+
+
+
+
+
+
+
+
+\chapter{Conclusão}
+
+
+Este trabalho tem como foco o desenvolvimento de um sistema inteligente de baixo
+custo para monitoramento e apoio à gestão de reservatórios de água. A solução integra um módulo embarcado baseado no ESP32, duas boias de nível, acionamento por relés, sinalização luminosa, chave seletora, comunicação MQTT, armazenamento no Cloud Firestore, \textit{backend} em FastAPI e aplicação web/mobile. A construção modular permite registrar eventos das boias e da bomba, acompanhar o histórico operacional, realizar acionamentos e disponibilizar informações ao usuário em uma única interface.
+
+A validação em laboratório é realizada com boias reais movimentadas manualmente no painel didático para reproduzir os estados baixo, médio e alto. Nesse ambiente, verifica-se o funcionamento da sinalização, do controle automático, dos comandos remotos e do acionamento físico. A prioridade atribuída à chave seletora permite sobrescrever os modos remoto e automático, enquanto o registro do estado solicitado, aplicado e confirmado aumenta a rastreabilidade das operações. A montagem em placa perfurada e a instalação em uma caixa produzida por impressão 3D também resultam em um protótipo mais organizado e protegido que a versão inicial em protoboard.
+
+As melhorias de comunicação reduzem uma das principais limitações observadas no relatório parcial. O buffer circular implementado no ESP32 permite armazenar temporariamente eventos que não podem ser enviados e retransmiti-los após o restabelecimento da conexão. Em conjunto com os identificadores únicos e o processamento idempotente no \textit{backend}, esse mecanismo diminui o risco de perda e duplicação de registros. As regras determinísticas impedem que sequências fisicamente incoerentes contaminem os ciclos de enchimento, enquanto o AutoCloud fornece uma camada de análise temporal sobre o tempo necessário para o nível passar da boia inferior à superior. Dessa forma, o sistema detecta comportamentos anômalos e apresenta possíveis causas, sem caracterizá-los como diagnóstico definitivo de falha.
+
+A aplicação também dispõe de uma versão para Android, gerada por meio do Capacitor e executada em aparelho físico, permitindo o uso das principais funções fora do navegador. O assistente em linguagem natural é integrado em duas configurações: o modelo local \texttt{qwen3:4b-instruct}, executado pelo Ollama, e o modelo online \texttt{gemini-3.6-flash}. A consulta prévia dos dados estruturados pelo \textit{backend} mantém as contagens, os tempos e as estimativas sob responsabilidade da aplicação, utilizando os modelos de linguagem principalmente para apresentar essas informações de forma mais acessível ao usuário.
+
+Os resultados permitem concluir que o protótipo atende ao objetivo de integrar monitoramento, acionamento, persistência, análise temporal e interação em linguagem natural em um sistema funcional de laboratório. Entretanto, a validação não contempla a instalação em condomínio, o enchimento hidráulico de um reservatório real, a medição direta de vazão ou a compilação para iOS. Por isso, os valores de consumo de água e energia apresentados permanecem estimativas baseadas em parâmetros configuráveis. Como continuidade, recomenda-se avaliar o sistema em campo, incorporar sensores de vazão e medição elétrica, ampliar os testes quantitativos do AutoCloud e dos modelos de linguagem e validar o aplicativo em outras plataformas. Essas etapas permitirão verificar o comportamento da solução sob variações reais de consumo, conectividade e operação prolongada.
+
