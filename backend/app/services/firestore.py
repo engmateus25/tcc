@@ -1,7 +1,7 @@
 import json
 import os
 from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Tuple
 
 import firebase_admin
 from firebase_admin import credentials, firestore
@@ -223,8 +223,69 @@ def fetch_recent_sensor_events_before(
     events: List[Dict] = []
     for doc in query.stream(retry=None, timeout=firestore_operation_timeout_seconds()):
         events.append(_sensor_event_from_doc(doc))
-    events.reverse()
+    events = _merge_sensor_history(
+        events,
+        _fetch_recent_sensor_events_fallback(event, limit=capped_limit),
+        event,
+        limit=capped_limit,
+    )
     return events
+
+
+def _fetch_recent_sensor_events_fallback(event: Dict, *, limit: int) -> List[Dict]:
+    """
+    Recupera historico mesmo quando `timestamp` foi gravado como string ISO.
+
+    A query principal usa comparacao nativa de Firestore com datetime. Documentos
+    manuais/legados podem ter `timestamp` textual e nao entram nesse filtro,
+    embora sejam parseaveis no backend.
+    """
+    event_ts = _normalize_datetime(event.get("timestamp"))
+    if event_ts is None:
+        return []
+
+    _init_firebase_admin_once()
+    db = firestore.client()
+    capped_limit = max(1, min(limit * 2, 500))
+    query = (
+        db.collection(SENSORS_COLLECTION)
+        .order_by("timestamp", direction=firestore.Query.DESCENDING)
+        .limit(capped_limit)
+    )
+
+    events: List[Dict] = []
+    current_key = _history_key(event)
+    for doc in query.stream(retry=None, timeout=firestore_operation_timeout_seconds()):
+        item = _sensor_event_from_doc(doc)
+        item_ts = _normalize_datetime(item.get("timestamp"))
+        if item_ts is None or _history_key(item) == current_key:
+            continue
+        if item_ts <= event_ts:
+            events.append(item)
+    return events
+
+
+def _merge_sensor_history(
+    primary: List[Dict],
+    fallback: List[Dict],
+    event: Dict,
+    *,
+    limit: int,
+) -> List[Dict]:
+    event_ts = _normalize_datetime(event.get("timestamp"))
+    current_key = _history_key(event)
+    merged: Dict[str, Dict] = {}
+    for item in [*primary, *fallback]:
+        item_ts = _normalize_datetime(item.get("timestamp"))
+        if item_ts is None or _history_key(item) == current_key:
+            continue
+        if event_ts is not None and item_ts > event_ts:
+            continue
+        merged[_history_key(item)] = item
+
+    events = list(merged.values())
+    events.sort(key=lambda item: _normalize_datetime(item.get("timestamp")) or datetime.min.replace(tzinfo=timezone.utc))
+    return events[-limit:]
 
 
 def _sensor_event_from_doc(doc) -> Dict:
@@ -236,11 +297,49 @@ def _sensor_event_from_doc(doc) -> Dict:
     return data
 
 
-def _normalize_datetime(value) -> datetime | None:
+def _history_key(event: Dict) -> str:
+    for key in ("event_id", "raw_path", "document_id"):
+        value = event.get(key)
+        if value:
+            text = str(value).strip()
+            if text:
+                return text
+    return ":".join(
+        [
+            str(event.get("sensor") or ""),
+            str(event.get("estado") or ""),
+            str(event.get("timestamp") or ""),
+        ]
+    )
+
+
+def _normalize_datetime(value: Any) -> datetime | None:
     if value is None:
         return None
     if isinstance(value, datetime):
         if value.tzinfo is None:
             return value.replace(tzinfo=timezone.utc)
         return value.astimezone(timezone.utc)
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        try:
+            parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
+    if hasattr(value, "to_datetime"):
+        return _normalize_datetime(value.to_datetime())
+    if hasattr(value, "toDate"):
+        return _normalize_datetime(value.toDate())
+    if hasattr(value, "seconds"):
+        try:
+            seconds = float(value.seconds)
+            nanos = float(getattr(value, "nanoseconds", 0) or 0)
+            return datetime.fromtimestamp(seconds + (nanos / 1_000_000_000), timezone.utc)
+        except (TypeError, ValueError, OSError):
+            return None
     return None

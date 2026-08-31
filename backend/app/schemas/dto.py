@@ -229,6 +229,7 @@ class SensorEventProcessResponse(BaseModel):
     payload_hash_mismatch: Optional[bool] = None
     alerts_created: List[dict] = Field(default_factory=list)
     cycle_created: Optional[Any] = None
+    autocloud_sample_created: Optional[Any] = None
     autocloud: dict = Field(default_factory=dict)
 
 

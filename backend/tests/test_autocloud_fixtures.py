@@ -125,6 +125,7 @@ def test_valid_sensor_fallback_cycle_fixture():
     assert len(cycles) == 1
     assert cycles[0]["start_source"] == "sensor_low_fallback"
     assert cycles[0]["fill_time_seconds"] == 480
+    assert cycles[0]["low_to_high_seconds"] == 420
 
 
 def test_command_fixture_confirmed_start_creates_cycle():

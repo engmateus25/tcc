@@ -130,6 +130,14 @@
         "source": "integration_test"
       },
       {
+        "event_id": "sensores/fallback-low-up",
+        "sensor": "baixo",
+        "estado": "subiu",
+        "timestamp": "2026-08-24T12:01:00Z",
+        "device_id": "esp32-reservatorio-01",
+        "source": "integration_test"
+      },
+      {
         "event_id": "sensores/fallback-end",
         "sensor": "alto",
         "estado": "subiu",

@@ -26,6 +26,7 @@ def test_alert_routes_are_registered_under_alerts_prefix():
 
     assert ("/alerts", ("GET",)) in routes
     assert ("/alerts/{alert_id}/ack", ("PATCH",)) in routes
+    assert ("/alerts/command-event", ("POST",)) in routes
     assert ("/alerts/sensor-event", ("POST",)) in routes
     assert ("/alerts/sensors", ("GET",)) in routes
 

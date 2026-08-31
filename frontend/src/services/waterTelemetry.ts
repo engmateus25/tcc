@@ -7,6 +7,11 @@ export type FirebaseConnectionStatus =
 export type SensorName = "baixo" | "alto";
 export type SensorAction = "subiu" | "desceu";
 export type ReservoirPhase = "filling" | "draining" | "full" | "low" | "unknown";
+export type PumpStateSource =
+  | "firestore_command"
+  | "mqtt_state"
+  | "sensor_automatic"
+  | "initial";
 
 export interface NormalizedSensorEvent {
   id: string;
@@ -29,6 +34,45 @@ export interface SensorTelemetrySnapshot {
 export interface PumpVisualState {
   pumpOn: boolean;
   confirmed?: boolean;
+}
+
+export interface NormalizedPumpCommandEvent {
+  id: string;
+  commandId: string;
+  timestamp: Date;
+  timestampSource: NormalizedSensorEvent["timestampSource"];
+  requestedState: boolean | null;
+  appliedState: boolean | null;
+  applied: boolean | null;
+  confirmed: boolean | null;
+  stateChanged: boolean | null;
+  source?: string | null;
+  priority?: string | null;
+  mode?: string | null;
+  overriddenBy?: string | null;
+  reason?: string | null;
+  deviceId?: string | null;
+}
+
+export interface PumpTelemetrySnapshot {
+  status: FirebaseConnectionStatus;
+  commands: NormalizedPumpCommandEvent[];
+  latestCommand: NormalizedPumpCommandEvent | null;
+  effectiveCommand: NormalizedPumpCommandEvent | null;
+  fromCache: boolean;
+  error?: string | null;
+}
+
+export interface EffectivePumpState {
+  pumpOn: boolean;
+  applied: boolean;
+  confirmed: boolean;
+  source: PumpStateSource;
+  mode?: string | null;
+  commandId?: string | null;
+  timestamp?: Date | null;
+  overriddenBy?: string | null;
+  reason?: string | null;
 }
 
 export interface VisualWaterLevelState {
@@ -76,6 +120,48 @@ export function normalizeSensorDocument(
     timestampSource: source,
     deviceId: readOptionalString(data.device_id),
     source: readOptionalString(data.source),
+  };
+}
+
+export function normalizePumpCommandDocument(
+  id: string,
+  data: Record<string, unknown>,
+  fallbackDate = new Date(),
+): NormalizedPumpCommandEvent | null {
+  const { date, source } = normalizeSensorTimestamp(
+    data.timestamp ?? data.applied_at ?? data.created_at_device ?? data.created_at,
+    fallbackDate,
+  );
+  const commandId = readOptionalString(data.command_id) || id;
+  const appliedState =
+    readOptionalBoolean(data.applied_state) ?? readOptionalBoolean(data.pump_on);
+  const requestedState =
+    readOptionalBoolean(data.requested_state) ?? readCommandTextState(data.bomba);
+
+  if (
+    appliedState === null &&
+    requestedState === null &&
+    readOptionalBoolean(data.applied) === null
+  ) {
+    return null;
+  }
+
+  return {
+    id,
+    commandId,
+    timestamp: date,
+    timestampSource: source,
+    requestedState,
+    appliedState,
+    applied: readOptionalBoolean(data.applied),
+    confirmed: readOptionalBoolean(data.confirmed),
+    stateChanged: readOptionalBoolean(data.state_changed),
+    source: readOptionalString(data.source) ?? readOptionalString(data.acionamento),
+    priority: readOptionalString(data.priority),
+    mode: readOptionalString(data.mode) ?? readOptionalString(data.acionamento),
+    overriddenBy: readOptionalString(data.overridden_by),
+    reason: readOptionalString(data.reason),
+    deviceId: readOptionalString(data.device_id),
   };
 }
 
@@ -139,6 +225,80 @@ export function buildSensorTelemetrySnapshot(
   };
 }
 
+export function buildPumpTelemetrySnapshot(
+  docs: Array<{ id: string; data: Record<string, unknown> }>,
+  options: {
+    fromCache?: boolean;
+    fallbackDate?: Date;
+  } = {},
+): PumpTelemetrySnapshot {
+  const fallbackDate = options.fallbackDate || new Date();
+  const commands = docs
+    .map((doc) => normalizePumpCommandDocument(doc.id, doc.data, fallbackDate))
+    .filter((event): event is NormalizedPumpCommandEvent => Boolean(event))
+    .sort((left, right) => right.timestamp.getTime() - left.timestamp.getTime());
+
+  const fromCache = Boolean(options.fromCache);
+  return {
+    status: fromCache ? "offline" : "connected",
+    commands,
+    latestCommand: commands[0] || null,
+    effectiveCommand: commands.find(isEffectivePumpCommand) || null,
+    fromCache,
+    error: null,
+  };
+}
+
+export function getEffectivePumpStateFromCommand(
+  command: NormalizedPumpCommandEvent | null,
+): EffectivePumpState | null {
+  if (!command || !isEffectivePumpCommand(command)) {
+    return null;
+  }
+  return {
+    pumpOn: Boolean(command.appliedState),
+    applied: command.applied === true,
+    confirmed: command.confirmed !== false,
+    source: "firestore_command",
+    mode: command.mode ?? command.priority ?? command.source,
+    commandId: command.commandId,
+    timestamp: command.timestamp,
+    overriddenBy: command.overriddenBy,
+    reason: command.reason,
+  };
+}
+
+export function getAutomaticPumpStateFromSensors(
+  events: NormalizedSensorEvent[],
+): EffectivePumpState | null {
+  const latestAutomaticBoundary = [...events]
+    .sort((left, right) => right.timestamp.getTime() - left.timestamp.getTime())
+    .find((event) =>
+      (event.sensor === "baixo" && event.estado === "desceu") ||
+      (event.sensor === "alto" && event.estado === "subiu")
+    );
+
+  if (!latestAutomaticBoundary) {
+    return null;
+  }
+
+  const pumpOn =
+    latestAutomaticBoundary.sensor === "baixo" &&
+    latestAutomaticBoundary.estado === "desceu";
+
+  return {
+    pumpOn,
+    applied: false,
+    confirmed: false,
+    source: "sensor_automatic",
+    mode: "automático",
+    timestamp: latestAutomaticBoundary.timestamp,
+    reason: pumpOn
+      ? "sensor baixo desceu; aguardando comando confirmado"
+      : "sensor alto subiu; aguardando confirmação de desligamento",
+  };
+}
+
 export function formatSensorDateTime(date: Date): string {
   return date.toLocaleString("pt-BR", {
     day: "2-digit",
@@ -148,6 +308,10 @@ export function formatSensorDateTime(date: Date): string {
     minute: "2-digit",
     second: "2-digit",
   }).replace(",", " às");
+}
+
+export function isEffectivePumpCommand(command: NormalizedPumpCommandEvent): boolean {
+  return command.applied === true && command.appliedState !== null;
 }
 
 export function deriveOperationalState(
@@ -298,6 +462,32 @@ function readOptionalString(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const text = value.trim();
   return text || null;
+}
+
+function readOptionalBoolean(value: unknown): boolean | null {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") {
+    if (value === 1) return true;
+    if (value === 0) return false;
+  }
+  if (typeof value === "string") {
+    const text = value.trim().toLowerCase();
+    if (["true", "1", "sim", "yes", "on", "ligar", "ligada"].includes(text)) {
+      return true;
+    }
+    if (["false", "0", "nao", "não", "no", "off", "desligar", "desligada"].includes(text)) {
+      return false;
+    }
+  }
+  return null;
+}
+
+function readCommandTextState(value: unknown): boolean | null {
+  const text = readOptionalString(value)?.toLowerCase();
+  if (!text) return null;
+  if (text.includes("deslig")) return false;
+  if (text.includes("lig")) return true;
+  return null;
 }
 
 function isTimestampLike(value: unknown): value is TimestampLike {

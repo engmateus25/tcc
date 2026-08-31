@@ -1,5 +1,8 @@
 import { vi } from "vitest";
-import type { SensorTelemetrySnapshot } from "./waterTelemetry";
+import type {
+  PumpTelemetrySnapshot,
+  SensorTelemetrySnapshot,
+} from "./waterTelemetry";
 
 const onSnapshotMock = vi.fn();
 
@@ -96,5 +99,43 @@ describe("firestoreService listener", () => {
 
     expect(received[0].status).toBe("error");
     expect(received[0].error).toBe("permission denied");
+  });
+
+  it("normalizes pump command changes from Firestore documents", async () => {
+    let next: (snapshot: unknown) => void = () => undefined;
+    onSnapshotMock.mockImplementation((_query, _options, onNext) => {
+      next = onNext as (snapshot: unknown) => void;
+      return vi.fn();
+    });
+
+    const { listenPumpCommandTelemetry } = await import("./firestoreService");
+    const received: PumpTelemetrySnapshot[] = [];
+    listenPumpCommandTelemetry((snapshot) => received.push(snapshot));
+
+    next({
+      docs: [
+        {
+          id: "command-1",
+          data: () => ({
+            command_id: "auto-1",
+            timestamp: "2026-08-24T18:32:10Z",
+            acionamento: "automático",
+            applied_state: true,
+            requested_state: true,
+            applied: true,
+            confirmed: true,
+          }),
+        },
+      ],
+      metadata: { fromCache: false },
+    });
+
+    expect(received[0].status).toBe("connected");
+    expect(received[0].effectiveCommand).toMatchObject({
+      commandId: "auto-1",
+      appliedState: true,
+      applied: true,
+      confirmed: true,
+    });
   });
 });

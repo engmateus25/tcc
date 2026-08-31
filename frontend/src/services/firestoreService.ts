@@ -5,7 +5,9 @@ import {
 } from "firebase/firestore";
 import { db, firebaseConfigError } from "./firestoreConfig";
 import {
+  buildPumpTelemetrySnapshot,
   buildSensorTelemetrySnapshot,
+  PumpTelemetrySnapshot,
   SensorTelemetrySnapshot,
 } from "./waterTelemetry";
 
@@ -21,6 +23,28 @@ type SensorDocumentData = {
   sensor?: unknown;
   estado?: unknown;
   timestamp?: FirestoreTimestampLike;
+};
+
+type PumpCommandDocumentData = {
+  timestamp?: FirestoreTimestampLike;
+  applied_at?: FirestoreTimestampLike;
+  created_at_device?: FirestoreTimestampLike;
+  created_at?: FirestoreTimestampLike;
+  command_id?: unknown;
+  bomba?: unknown;
+  acionamento?: unknown;
+  requested_state?: unknown;
+  applied_state?: unknown;
+  pump_on?: unknown;
+  applied?: unknown;
+  confirmed?: unknown;
+  state_changed?: unknown;
+  source?: unknown;
+  priority?: unknown;
+  mode?: unknown;
+  overridden_by?: unknown;
+  reason?: unknown;
+  device_id?: unknown;
 };
 
 export type SensorHistoryItem = {
@@ -200,6 +224,59 @@ export function listenSensorTelemetry(
         status: "error",
         events: [],
         latestEvent: null,
+        fromCache: false,
+        error: err.message,
+      });
+      onError?.(err);
+    },
+  );
+}
+
+export function listenPumpCommandTelemetry(
+  onChange: (snapshot: PumpTelemetrySnapshot) => void,
+  onError?: (e: FirestoreError) => void,
+  options: { limitCount?: number } = {},
+): Unsubscribe {
+  if (!db) {
+    logFirebaseConfigError();
+    onChange({
+      status: "error",
+      commands: [],
+      latestCommand: null,
+      effectiveCommand: null,
+      fromCache: false,
+      error: firebaseConfigError || "Firebase não configurado",
+    });
+    return () => undefined;
+  }
+
+  const comandosRef = collection(db, "comandos");
+  const q = query(
+    comandosRef,
+    orderBy("timestamp", "desc"),
+    limit(options.limitCount || 10),
+  );
+
+  return onSnapshot(
+    q,
+    { includeMetadataChanges: true },
+    (snap) => {
+      const docs = snap.docs.map((doc) => ({
+        id: doc.id,
+        data: doc.data() as PumpCommandDocumentData as Record<string, unknown>,
+      }));
+      onChange(
+        buildPumpTelemetrySnapshot(docs, {
+          fromCache: snap.metadata.fromCache,
+        }),
+      );
+    },
+    (err) => {
+      onChange({
+        status: "error",
+        commands: [],
+        latestCommand: null,
+        effectiveCommand: null,
         fromCache: false,
         error: err.message,
       });

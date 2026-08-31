@@ -158,6 +158,17 @@ python scripts/seed_integration_firestore.py --cleanup --test-run-id codex-integ
 
 Para validar gatilhos reais nas colecoes operacionais `sensores` e `comandos`, use `--operational` conscientemente e remova somente os documentos do mesmo `test_run_id`. Nunca limpe colecoes inteiras.
 
+### Seed do AutoCloud para PIBITI
+
+O script `backend/scripts/seed_autocloud_firestore.py` grava cinco ciclos normais na colecao `autocloud_filling_samples`, valida um ciclo normal sem alerta, processa um ciclo lento para gerar `slow_fill_cycle` e processa um caso de intertravamento para gerar `unexpected_high_without_low`.
+
+```bash
+cd backend
+.venv/bin/python scripts/seed_autocloud_firestore.py
+```
+
+Na validacao de 31/08/2026, foi gravado o `test_run_id=pibiti-20260831-103355`. Esse identificador pode ser usado no console do Firebase para localizar as amostras e alertas demonstrativos.
+
 ### Variaveis de ambiente do backend
 
 As variaveis abaixo aparecem no codigo atual ou sao esperadas pelas integracoes:
@@ -253,7 +264,7 @@ Pontos principais:
 - `frontend/src/pages/ChatPage.tsx`: interface do assistente IA.
 - `frontend/src/hooks/useWaterSystem.ts`: estado central, Firestore realtime e MQTT.
 - `frontend/src/hooks/useAlerts.ts`: polling dos alertas persistidos no backend.
-- `frontend/src/services/firestoreService.ts`: consultas e listeners da colecao `sensores`.
+- `frontend/src/services/firestoreService.ts`: consultas e listeners das colecoes `sensores` e `comandos`.
 - `frontend/src/services/mqttService.ts`: conexao MQTT configuravel por ambiente e publicacao em `bomba/controle/v2`.
 - `frontend/src/services/aiService.ts`: chamadas ao backend.
 - `frontend/src/services/alerts.ts`: consulta e reconhecimento de alertas inteligentes.
@@ -356,6 +367,16 @@ A Home usa um listener da colecao `sensores` com `orderBy("timestamp", "desc")` 
 
 O campo "Ultimo Sensor Alterado" mostra sensor, evento, estado operacional derivado e data/hora em `pt-BR`. O nivel cilindrico e uma estimativa visual calculada pelo timestamp do ultimo evento e parametros centralizados: nivel baixo em 20%, piso de esvaziamento em 21%, enchimento visual em 480s e esvaziamento visual em 480s. Durante enchimento sem confirmacao do sensor alto, a visualizacao fica limitada a 99% e exibe "Aguardando confirmacao do sensor alto". Essa animacao nao cria documentos no Firestore e nao e usada para calculo de consumo.
 
+Em telas a partir de `1024px`, a Home organiza o painel em duas colunas: indicadores, alertas e reservatorio na coluna principal, e atalhos/estado do sistema na coluna lateral. Em telas menores, a composicao volta para uma coluna. O cabecalho azul compartilhado fica dentro do fluxo do `IonContent`, entao rola junto com o conteudo em vez de permanecer fixo.
+
+O estado operacional da bomba e centralizado em `useWaterSystem`. A fonte preferencial e a colecao `comandos`, usando somente eventos realmente aplicados (`applied=true`) e seu `applied_state`; em seguida entram confirmacoes MQTT de `bomba/estado`; se ainda nao houver confirmacao operacional mais recente, a interface usa uma inferencia temporaria pelos sensores (`baixo desceu` liga automatico, `alto subiu` desliga automatico). Com isso, Home, controle da bomba, estimativas e estatisticas compartilham a mesma leitura efetiva.
+
+### Historico e relatorios
+
+A tela de Historico usa controles clicaveis com borda, foco e estado selecionado para periodos (`7d`, `30d`, `90d`) e tipos (`agua`, `energia`, `sensores`). O bloco antigo de atalho para o assistente IA foi removido dessa tela; o acesso ao chatbot continua disponivel pela Home e pela rota dedicada.
+
+Os relatorios PDF gerados pelo backend quebram linhas longas em alertas recentes, valores de blocos-chave e observacoes. A geracao reserva altura dinamica e cria novas paginas quando necessario para evitar sobreposicao entre textos, tabelas e secoes.
+
 ## Firmware
 
 O firmware fica em `firmware/TCC.ino/` e possui duas variantes:
@@ -441,7 +462,8 @@ Uso atual:
 - Firestore `chat_sessions`: sessoes e mensagens do chat no backend.
 - Firestore `sensor_event_processing`: controle tecnico de processamento idempotente por evento.
 - Firestore `alerts`: alertas padronizados com `event_id`, `type`, `severity`, `status`, causas possiveis e metadados.
-- Firestore `filling_cycles`: ciclos validos de enchimento com inicio preferencial em bomba aplicada/confirmada como ligada, fallback em `baixo desceu` e fim em `alto subiu`.
+- Firestore `filling_cycles`: ciclos validos de enchimento com inicio preferencial em bomba aplicada/confirmada como ligada, transicao `baixo subiu` quando disponivel e fim em `alto subiu`.
+- Firestore `autocloud_filling_samples`: amostras vetorizadas de ciclos validos usadas como linha de base de clusterizacao do AutoCloud.
 - MQTT `bomba/controle`: comandos texto legados.
 - MQTT `bomba/controle/v2`: comandos JSON versionados enviados pelo app.
 - MQTT `bomba/estado`: status lido pelo app quando publicado.
@@ -468,11 +490,13 @@ Quando `SENSOR_EVENT_WEBHOOK_SECRET` estiver definido no backend, a chamada deve
 
 O webhook `POST /alerts/command-event` recebe documentos da colecao `comandos` e usa o mesmo segredo compartilhado. O payload inclui `command_id`, estado solicitado, estado aplicado, confirmacao, prioridade e sobreposicao. Comandos com `applied=true`, `confirmed=true` e `applied_state=true` iniciam preferencialmente um ciclo de enchimento; comandos nao aplicados, nao confirmados ou sobrepostos ficam auditados, mas nao entram como inicio de ciclo nem no calculo de energia.
 
-As colecoes tecnicas `sensor_event_processing`, `alerts` e `filling_cycles` sao criadas automaticamente pelo Firestore no primeiro documento gravado com credenciais Firebase Admin validas. Se a credencial estiver invalida ou indisponivel, as rotas de alertas retornam `503` em vez de aguardar o retry longo padrao do SDK. A consulta `GET /alerts` busca por periodo e filtra `status`/`severity` no backend para nao depender de indice composto do Firestore durante o desenvolvimento local.
+As colecoes tecnicas `sensor_event_processing`, `alerts`, `filling_cycles` e `autocloud_filling_samples` sao criadas automaticamente pelo Firestore no primeiro documento gravado com credenciais Firebase Admin validas. Se a credencial estiver invalida ou indisponivel, as rotas de alertas retornam `503` em vez de aguardar o retry longo padrao do SDK. A consulta `GET /alerts` busca por periodo e filtra `status`/`severity` no backend para nao depender de indice composto do Firestore durante o desenvolvimento local.
 
 Depois da idempotencia, o backend aplica regras deterministicas antes de qualquer analise temporal. Eventos com alerta bloqueante, como duplicidade, timestamp ausente, fora de ordem, repeticao suspeita do sensor baixo ou esvaziamento rapido demais, nao alimentam ciclos nem a analise de tempo de enchimento.
 
-O ciclo de enchimento persistido considera como inicio preferencial o comando/estado da bomba aplicado e confirmado como ligada. Quando essa confirmacao nao existir, o backend usa `baixo desceu` como fallback de inicio automatico. O fim do ciclo e `alto subiu`, representando reservatorio cheio. O campo `fill_time_seconds` alimenta a analise temporal de enchimento, que retorna `insufficient_data` com poucos ciclos e gera alertas como `slow_fill_cycle`, `persistent_fill_time_shift` ou `new_fill_time_cluster` quando a duracao fica fora da linha de base.
+O ciclo de enchimento persistido considera como inicio preferencial o comando/estado da bomba aplicado e confirmado como ligada. Quando essa confirmacao nao existir, a sequencia de sensores valida e `baixo desceu`, `baixo subiu` e `alto subiu`; a transicao `baixo subiu` e armazenada como marco fisico de ultrapassagem da boia inferior. O ciclo guarda `fill_time_seconds`, `low_to_high_seconds` e `pump_to_low_seconds`.
+
+O AutoCloud usa `autocloud_filling_samples` como baseline operacional. Cada ciclo e vetorizado com duracao total, tempo entre `baixo subiu` e `alto subiu`, tempo ate ultrapassar a boia baixa, tipo de inicio e completude da sequencia de sensores. O vetor e normalizado por mediana e escala robusta antes de entrar no algoritmo incremental de nuvens. A analise retorna `insufficient_data` com poucos ciclos e gera alertas como `slow_fill_cycle`, `persistent_fill_time_shift` ou `new_fill_time_cluster` quando a duracao ou o agrupamento fica fora da linha de base.
 
 ## Firebase Functions
 

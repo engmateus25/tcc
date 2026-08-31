@@ -1,8 +1,12 @@
 import {
+  buildPumpTelemetrySnapshot,
   buildSensorTelemetrySnapshot,
   deriveOperationalState,
   estimateVisualWaterLevel,
   formatSensorDateTime,
+  getAutomaticPumpStateFromSensors,
+  getEffectivePumpStateFromCommand,
+  normalizePumpCommandDocument,
   normalizeSensorDocument,
   normalizeSensorTimestamp,
 } from "./waterTelemetry";
@@ -107,5 +111,80 @@ describe("waterTelemetry", () => {
 
     expect(drained.level).toBe(21);
     expect(drained.phase).toBe("draining");
+  });
+
+  it("normalizes applied pump commands as the effective pump state", () => {
+    const snapshot = buildPumpTelemetrySnapshot(
+      [
+        {
+          id: "auto-on",
+          data: {
+            command_id: "auto-1",
+            timestamp: "2026-08-24T18:00:00Z",
+            acionamento: "automático",
+            applied_state: true,
+            requested_state: true,
+            applied: true,
+            confirmed: true,
+            state_changed: true,
+          },
+        },
+      ],
+      { fallbackDate: BASE },
+    );
+
+    const state = getEffectivePumpStateFromCommand(snapshot.effectiveCommand);
+
+    expect(snapshot.status).toBe("connected");
+    expect(state).toMatchObject({
+      pumpOn: true,
+      applied: true,
+      confirmed: true,
+      source: "firestore_command",
+      mode: "automático",
+      commandId: "auto-1",
+    });
+  });
+
+  it("keeps overridden pump commands out of the effective pump state", () => {
+    const command = normalizePumpCommandDocument(
+      "remote-off",
+      {
+        timestamp: "2026-08-24T18:00:00Z",
+        bomba: "bomba desligar",
+        requested_state: false,
+        applied_state: true,
+        applied: false,
+        confirmed: true,
+        overridden_by: "físico",
+      },
+      BASE,
+    );
+
+    expect(command?.requestedState).toBe(false);
+    expect(command?.appliedState).toBe(true);
+    expect(getEffectivePumpStateFromCommand(command)).toBeNull();
+  });
+
+  it("infers the automatic pump intent from sensor boundaries until command confirmation arrives", () => {
+    const lowDropped = normalizeSensorDocument(
+      "sensor-low",
+      { sensor: "baixo", estado: "desceu", timestamp: "2026-08-24T18:00:00Z" },
+      BASE,
+    )!;
+    const lowRaised = normalizeSensorDocument(
+      "sensor-low-up",
+      { sensor: "baixo", estado: "subiu", timestamp: "2026-08-24T18:03:00Z" },
+      BASE,
+    )!;
+
+    const state = getAutomaticPumpStateFromSensors([lowDropped, lowRaised]);
+
+    expect(state).toMatchObject({
+      pumpOn: true,
+      confirmed: false,
+      source: "sensor_automatic",
+      mode: "automático",
+    });
   });
 });

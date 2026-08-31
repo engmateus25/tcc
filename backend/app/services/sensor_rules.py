@@ -229,6 +229,9 @@ def _build_alert(
             **metadata,
             "sensor": _clean_text(event.get("sensor")),
             "estado": _clean_text(event.get("estado")),
+            "device_id": event.get("device_id"),
+            "source": event.get("source"),
+            "test_run_id": event.get("test_run_id"),
             "document_id": event.get("document_id"),
             "raw_path": event.get("raw_path"),
         },
@@ -275,6 +278,17 @@ def _normalize_datetime(value: Any) -> Optional[datetime]:
         if value.tzinfo is None:
             return value.replace(tzinfo=timezone.utc)
         return value.astimezone(timezone.utc)
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        try:
+            parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
     return None
 
 

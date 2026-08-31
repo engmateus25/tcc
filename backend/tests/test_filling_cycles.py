@@ -60,12 +60,31 @@ def test_extracts_low_to_high_filling_cycle():
     assert cycles[0]["start_event_id"] == "sensores/empty"
     assert cycles[0]["end_event_id"] == "sensores/end"
     assert cycles[0]["fill_time_seconds"] == 480
+    assert cycles[0]["low_raised_event_id"] == "sensores/low-up"
+    assert cycles[0]["low_to_high_seconds"] == 420
+    assert cycles[0]["pump_to_low_seconds"] == 60
     assert cycles[0]["start_source"] == "sensor_low_fallback"
+
+
+def test_can_use_low_raised_event_as_sensor_fallback_start():
+    cycles = extract_filling_cycles(
+        [
+            event("sensores/low-up", "baixo", "subiu", 60),
+            event("sensores/end", "alto", "subiu", 480),
+        ]
+    )
+
+    assert len(cycles) == 1
+    assert cycles[0]["start_event_id"] == "sensores/low-up"
+    assert cycles[0]["fill_time_seconds"] == 420
+    assert cycles[0]["low_to_high_seconds"] == 420
+    assert cycles[0]["start_source"] == "sensor_low_raised_fallback"
 
 
 def test_prefers_confirmed_pump_command_as_filling_cycle_start():
     tracker = FillingCycleTracker()
     tracker.process_command_event(command("comandos/start", 0))
+    tracker.process_event(event("sensores/low-up", "baixo", "subiu", 60))
     cycle_created = tracker.process_event(event("sensores/end", "alto", "subiu", 480))
 
     assert cycle_created is not None
@@ -73,6 +92,8 @@ def test_prefers_confirmed_pump_command_as_filling_cycle_start():
     assert cycle_created["start_source"] == "pump_command_confirmed"
     assert cycle_created["pump_started_at"] == BASE
     assert cycle_created["fill_time_seconds"] == 480
+    assert cycle_created["low_to_high_seconds"] == 420
+    assert cycle_created["pump_to_low_seconds"] == 60
 
 
 def test_ignores_unconfirmed_pump_command_as_cycle_start():

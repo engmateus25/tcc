@@ -74,6 +74,32 @@ def test_high_rising_after_low_dropped_is_flagged():
     assert "unexpected_high_without_low" in alert_types(alerts)
 
 
+def test_high_rising_after_low_dropped_with_iso_history_is_flagged():
+    low_event = event("sensores/doc-1", "baixo", "desceu", 0)
+    low_event["timestamp"] = low_event["timestamp"].isoformat().replace("+00:00", "Z")
+
+    alerts = evaluate_sensor_event_rules(
+        event("sensores/doc-2", "alto", "subiu", 30),
+        [low_event],
+        CONFIG,
+    )
+
+    assert "unexpected_high_without_low" in alert_types(alerts)
+
+
+def test_high_rising_after_low_raised_is_valid_sequence():
+    alerts = evaluate_sensor_event_rules(
+        event("sensores/doc-3", "alto", "subiu", 120),
+        [
+            event("sensores/doc-1", "baixo", "desceu", 0),
+            event("sensores/doc-2", "baixo", "subiu", 60),
+        ],
+        CONFIG,
+    )
+
+    assert "unexpected_high_without_low" not in alert_types(alerts)
+
+
 def test_missing_timestamp_blocks_cycle_processing():
     alerts = evaluate_sensor_event_rules(
         {"event_id": "sensores/doc-1", "sensor": "baixo", "estado": "subiu"},

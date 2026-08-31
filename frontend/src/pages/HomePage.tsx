@@ -43,86 +43,86 @@ export function HomePage() {
 
   return (
     <>
-      {/* Alerta de Nível */}
-      <WaterLevelAlert waterLevel={waterLevel} />
+      <div
+        data-testid="home-responsive-grid"
+        className="home-responsive-grid"
+      >
+        <div data-testid="home-left-column" className="min-w-0">
+          <WaterLevelAlert waterLevel={waterLevel} />
 
-      <IntelligentAlertsPanel
-        alerts={alerts}
-        isLoading={isLoadingAlerts}
-        isRefreshing={isRefreshingAlerts}
-        error={alertsError}
-        lastUpdatedAt={alertsLastUpdatedAt}
-        acknowledgingId={acknowledgingId}
-        onRefresh={refreshAlerts}
-        onAcknowledge={acknowledgeAlert}
-      />
-
-      {/* Estatísticas Rápidas */}
-      <QuickStats waterLevel={waterLevel} isPumpOn={isPumpOn} />
-
-      {/* Visualização do Tanque - Destaque */}
-      <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
-        <h2 className="text-lg text-slate-700 mb-4 text-center">Nível do Reservatório</h2>
-        <div className="flex justify-center">
-          <WaterTankVisualization waterLevel={waterLevel} />
-        </div>
-        <div className="mt-4 text-center">
-          <p className="text-sm text-slate-700">{reservoirStatus}</p>
-          {waitingForHighConfirmation && (
-            <p className="mt-1 text-xs text-amber-600">
-              A estimativa visual está limitada até confirmação do sensor alto.
-            </p>
-          )}
-        </div>
-      </div>
-
-      {/* Grid de Informações */}
-      <div className="grid grid-cols-1 gap-4 mb-6">
-        {/* Status do Sensor */}
-        <SensorStatus
-          sensor={lastSensor}
-          connectionLabel={firebaseStatusLabel(firebaseStatus, firebaseError)}
-        />
-
-        {/* Grid 2 colunas para Controle e Modo */}
-        <div className="grid grid-cols-2 gap-4">
-          <PumpControl
-            isOn={isPumpOn}
-            onToggle={togglePump}
-            isPending={Boolean(pendingPumpCommand)}
-            statusMessage={pumpStatusMessage}
+          <IntelligentAlertsPanel
+            alerts={alerts}
+            isLoading={isLoadingAlerts}
+            isRefreshing={isRefreshingAlerts}
+            error={alertsError}
+            lastUpdatedAt={alertsLastUpdatedAt}
+            acknowledgingId={acknowledgingId}
+            onRefresh={refreshAlerts}
+            onAcknowledge={acknowledgeAlert}
           />
-          <PumpModeDisplay mode={pumpMode} />
+
+          <QuickStats waterLevel={waterLevel} isPumpOn={isPumpOn} />
+
+          <div className="mb-6 rounded-2xl border border-slate-100 bg-white p-5 shadow-lg sm:p-6">
+            <h2 className="mb-4 text-center text-lg text-slate-700">Nível do Reservatório</h2>
+            <div className="flex justify-center">
+              <WaterTankVisualization waterLevel={waterLevel} />
+            </div>
+            <div className="mt-4 text-center">
+              <p className="text-sm text-slate-700">{reservoirStatus}</p>
+              {waitingForHighConfirmation && (
+                <p className="mt-1 text-xs text-amber-600">
+                  A estimativa visual está limitada até confirmação do sensor alto.
+                </p>
+              )}
+            </div>
+          </div>
         </div>
 
-        {/* Estimativa de Energia */}
-        <EnergyEstimate isPumpOn={isPumpOn} pumpPowerWatts={750} />
-      </div>
+        <div data-testid="home-right-column" className="flex min-w-0 flex-col gap-4">
+          <div className="order-1 grid grid-cols-1 gap-4 lg:order-2">
+            <SensorStatus
+              sensor={lastSensor}
+              connectionLabel={firebaseStatusLabel(firebaseStatus, firebaseError)}
+            />
 
-      {/* Navegação Inferior - Botões para outras telas */}
-      <div className="grid grid-cols-2 gap-4 mt-8">
-        <Button
-          variant="outline"
-          className="home-action-button home-action-history"
-          onClick={() => history.push("/history")}
-        >
-          <BarChart3 className="w-6 h-6" />
-          <span className="text-xs">Histórico</span>
-        </Button>
+            <div className="grid grid-cols-2 gap-4">
+              <PumpControl
+                isOn={isPumpOn}
+                onToggle={togglePump}
+                isPending={Boolean(pendingPumpCommand)}
+                statusMessage={pumpStatusMessage}
+              />
+              <PumpModeDisplay mode={pumpMode} />
+            </div>
 
-        <Button
-          variant="outline"
-          className="home-action-button home-action-chat"
-          onClick={() => history.push("/chat")}
-        >
-          <MessageSquare className="w-6 h-6" />
-          <span className="text-xs">Assistente IA</span>
-        </Button>
-      </div>
+            <EnergyEstimate isPumpOn={isPumpOn} pumpPowerWatts={750} />
+          </div>
 
-      {/* Info Footer */}
-      <div className="mt-6 text-center text-xs text-slate-400">
-        <p>Última atualização: {new Date().toLocaleString("pt-BR")}</p>
+          <div className="order-2 grid grid-cols-2 gap-4 lg:order-1">
+            <Button
+              variant="outline"
+              className="home-action-button home-action-history"
+              onClick={() => history.push("/history")}
+            >
+              <BarChart3 className="h-6 w-6" />
+              <span className="text-xs">Histórico</span>
+            </Button>
+
+            <Button
+              variant="outline"
+              className="home-action-button home-action-chat"
+              onClick={() => history.push("/chat")}
+            >
+              <MessageSquare className="h-6 w-6" />
+              <span className="text-xs">Assistente IA</span>
+            </Button>
+          </div>
+
+          <div className="order-3 mt-2 text-center text-xs text-slate-400 lg:text-right">
+            <p>Última atualização: {new Date().toLocaleString("pt-BR")}</p>
+          </div>
+        </div>
       </div>
     </>
   );

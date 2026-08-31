@@ -4,6 +4,11 @@ from typing import Any, Dict, List
 
 from .alerts_store import save_alerts
 from .autocloud_fill_time import analyze_fill_time_cycle
+from .autocloud_samples import (
+    fetch_autocloud_filling_samples,
+    merge_historical_samples,
+    save_autocloud_filling_sample,
+)
 from .energy import fetch_recent_pump_command_events_before
 from .filling_cycles import FillingCycleTracker, save_filling_cycle
 from .firestore import fetch_recent_sensor_events_before, is_firestore_dependency_error
@@ -40,6 +45,7 @@ class SensorRealtimeEngine:
         event: Dict[str, Any],
         history: List[Dict[str, Any]] | None = None,
         command_history: List[Dict[str, Any]] | None = None,
+        historical_autocloud_samples: List[Dict[str, Any]] | None = None,
     ) -> Dict[str, Any]:
         with self.lock:
             context_history = self._context_history(event, history or [])
@@ -60,7 +66,10 @@ class SensorRealtimeEngine:
                 )
                 _merge_runtime_command_starts(cycle_tracker, self.cycle_tracker, event)
 
-            historical_cycles = list(cycle_tracker.completed_cycles)
+            historical_cycles = merge_historical_samples(
+                list(cycle_tracker.completed_cycles),
+                historical_autocloud_samples or [],
+            )
             if blocks_cycle:
                 autocloud_result = {
                     "used": False,
@@ -84,11 +93,17 @@ class SensorRealtimeEngine:
 
         alerts_created = save_alerts(alerts_to_save) if alerts_to_save else []
         cycle_created = save_filling_cycle(cycle) if cycle else None
+        autocloud_sample_created = (
+            save_autocloud_filling_sample(cycle, autocloud_result)
+            if cycle
+            else None
+        )
 
         return {
             "rule_alerts": rule_alerts,
             "alerts_created": alerts_created,
             "cycle_created": cycle_created,
+            "autocloud_sample_created": autocloud_sample_created,
             "autocloud": _public_autocloud_result(autocloud_result),
         }
 
@@ -147,6 +162,7 @@ def process_new_sensor_event(event: Dict[str, Any]) -> Dict[str, Any]:
             "payload_hash_mismatch": reservation.payload_hash_mismatch,
             "alerts_created": [],
             "cycle_created": None,
+            "autocloud_sample_created": None,
             "autocloud": {
                 "used": False,
                 "reason": "duplicate_event",
@@ -168,10 +184,18 @@ def process_new_sensor_event(event: Dict[str, Any]) -> Dict[str, Any]:
             event_with_identity,
             limit=_engine.max_history_events,
         )
+        autocloud_samples = []
+        if _is_autocloud_candidate_event(event_with_identity):
+            autocloud_samples = fetch_autocloud_filling_samples(
+                device_id=event_with_identity.get("device_id"),
+                before=event_with_identity.get("timestamp"),
+                limit=_engine.max_history_events,
+            )
         engine_result = _engine.process_event(
             event_with_identity,
             history=persisted_history,
             command_history=command_history,
+            historical_autocloud_samples=autocloud_samples,
         )
         result = {
             "processed": True,
@@ -182,6 +206,7 @@ def process_new_sensor_event(event: Dict[str, Any]) -> Dict[str, Any]:
             "payload_hash_mismatch": False,
             "alerts_created": engine_result.get("alerts_created") or [],
             "cycle_created": engine_result.get("cycle_created"),
+            "autocloud_sample_created": engine_result.get("autocloud_sample_created"),
             "autocloud": engine_result.get("autocloud") or {},
         }
         mark_sensor_event_processed(reservation, result)
@@ -208,6 +233,7 @@ def process_new_command_event(event: Dict[str, Any]) -> Dict[str, Any]:
             "payload_hash_mismatch": reservation.payload_hash_mismatch,
             "alerts_created": [],
             "cycle_created": None,
+            "autocloud_sample_created": None,
             "autocloud": {
                 "used": False,
                 "reason": "duplicate_event",
@@ -232,6 +258,7 @@ def process_new_command_event(event: Dict[str, Any]) -> Dict[str, Any]:
             "payload_hash_mismatch": False,
             "alerts_created": engine_result.get("alerts_created") or [],
             "cycle_created": engine_result.get("cycle_created"),
+            "autocloud_sample_created": engine_result.get("autocloud_sample_created"),
             "autocloud": engine_result.get("autocloud") or {},
         }
         mark_sensor_event_processed(reservation, result)
@@ -247,6 +274,13 @@ def process_new_command_event(event: Dict[str, Any]) -> Dict[str, Any]:
 
 def _public_autocloud_result(result: Dict[str, Any]) -> Dict[str, Any]:
     return {key: value for key, value in result.items() if key != "alert"}
+
+
+def _is_autocloud_candidate_event(event: Dict[str, Any]) -> bool:
+    return (
+        str(event.get("sensor") or "").strip().lower() == "alto"
+        and str(event.get("estado") or "").strip().lower() == "subiu"
+    )
 
 
 def _build_cycle_tracker_from_history(
@@ -312,6 +346,17 @@ def _normalize_datetime(value: Any):
         if value.tzinfo is None:
             return value.replace(tzinfo=timezone.utc)
         return value.astimezone(timezone.utc)
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        try:
+            parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
     return None
 
 

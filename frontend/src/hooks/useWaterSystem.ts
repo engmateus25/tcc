@@ -19,12 +19,20 @@ import client, {
   parsePumpStateMessage,
   PumpStateMessage,
 } from "../services/mqttService";
-import { listenSensorTelemetry } from "../services/firestoreService";
+import {
+  listenPumpCommandTelemetry,
+  listenSensorTelemetry,
+} from "../services/firestoreService";
 import {
   deriveOperationalState,
+  EffectivePumpState,
   estimateVisualWaterLevel,
   formatSensorDateTime,
+  getAutomaticPumpStateFromSensors,
+  getEffectivePumpStateFromCommand,
+  NormalizedPumpCommandEvent,
   NormalizedSensorEvent,
+  PumpStateSource,
   WATER_LEVEL_ESTIMATION_CONFIG,
 } from "../services/waterTelemetry";
 
@@ -33,9 +41,13 @@ type State = {
   reservoirStatus: string;
   waitingForHighConfirmation: boolean;
   isPumpOn: boolean;
+  isPumpStateConfirmed: boolean;
+  pumpStateSource: PumpStateSource;
+  pumpStateUpdatedAt: Date | null;
   pumpMode: PumpMode;
   lastSensor: LastSensor | null;
   sensorEvents: NormalizedSensorEvent[];
+  pumpCommands: NormalizedPumpCommandEvent[];
   firebaseStatus: FirebaseConnectionStatus;
   firebaseError: string | null;
   isConnected: { firebase: boolean; mqtt: boolean };
@@ -51,6 +63,8 @@ export interface WaterSystemValue {
   reservoirStatus: string;
   waitingForHighConfirmation: boolean;
   isPumpOn: boolean;
+  isPumpStateConfirmed: boolean;
+  pumpStateSource: PumpStateSource;
   pumpMode: PumpMode;
   lastSensor: LastSensor | null;
   firebaseStatus: FirebaseConnectionStatus;
@@ -76,9 +90,13 @@ const initialState: State = {
   reservoirStatus: "Aguardando leitura",
   waitingForHighConfirmation: false,
   isPumpOn: false,
+  isPumpStateConfirmed: false,
+  pumpStateSource: "initial",
+  pumpStateUpdatedAt: null,
   pumpMode: "automático",
   lastSensor: null,
   sensorEvents: [],
+  pumpCommands: [],
   firebaseStatus: "connecting",
   firebaseError: null,
   isConnected: { firebase: false, mqtt: false },
@@ -92,48 +110,30 @@ export function useWaterSystemState(): WaterSystemValue {
   // ---- FIRESTORE: escuta o último evento da coleção `sensores` ----
   useEffect(() => {
     const unsub = listenSensorTelemetry((snapshot) => {
-      setState((s) => {
-        const visual = estimateVisualWaterLevel(
-          snapshot.events,
-          new Date(),
-          { pumpOn: s.isPumpOn },
-        );
-        const operationalState = deriveOperationalState(
-          snapshot.events,
-          { pumpOn: s.isPumpOn },
-        );
-        const latest = snapshot.latestEvent;
-        const lastSensor: LastSensor | null = latest
-          ? {
-              name: latest.sensor,
-              action: latest.estado,
-              date: latest.timestamp.toLocaleDateString("pt-BR"),
-              time: latest.timestamp.toLocaleTimeString("pt-BR", {
-                hour: "2-digit",
-                minute: "2-digit",
-                second: "2-digit",
-              }),
-              dateTime: formatSensorDateTime(latest.timestamp),
-              operationalState,
-            }
-          : null;
+      setState((s) => withSensorTelemetry(s, snapshot));
+    });
 
-        return {
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    const unsub = listenPumpCommandTelemetry((snapshot) => {
+      setState((s) => {
+        let next: State = {
           ...s,
-          sensorEvents: snapshot.events,
-          lastSensor,
-          waterLevel: visual.level,
-          reservoirStatus: visual.waitingForHighConfirmation
-            ? "Aguardando confirmação do sensor alto"
-            : visual.label,
-          waitingForHighConfirmation: visual.waitingForHighConfirmation,
-          firebaseStatus: snapshot.status,
-          firebaseError: snapshot.error || null,
-          isConnected: {
-            ...s.isConnected,
-            firebase: snapshot.status === "connected",
-          },
+          pumpCommands: snapshot.commands,
         };
+        const effective = getEffectivePumpStateFromCommand(snapshot.effectiveCommand);
+        if (effective) {
+          next = applyEffectivePumpState(next, effective, pumpCommandStatus(snapshot.effectiveCommand));
+        } else if (snapshot.latestCommand && snapshot.latestCommand.applied === false) {
+          next = {
+            ...next,
+            pendingCommand: clearMatchingPendingCommand(next, snapshot.latestCommand.commandId),
+            lastPumpStatus: pumpCommandStatus(snapshot.latestCommand),
+          };
+        }
+        return withVisualState(next);
       });
     });
 
@@ -146,7 +146,7 @@ export function useWaterSystemState(): WaterSystemValue {
         const visual = estimateVisualWaterLevel(
           s.sensorEvents,
           new Date(),
-          { pumpOn: s.isPumpOn },
+          { pumpOn: s.isPumpOn, confirmed: s.isPumpStateConfirmed },
         );
         return {
           ...s,
@@ -226,6 +226,8 @@ export function useWaterSystemState(): WaterSystemValue {
     reservoirStatus: state.reservoirStatus,
     waitingForHighConfirmation: state.waitingForHighConfirmation,
     isPumpOn: state.isPumpOn,
+    isPumpStateConfirmed: state.isPumpStateConfirmed,
+    pumpStateSource: state.pumpStateSource,
     pumpMode: state.pumpMode,
     lastSensor: state.lastSensor,
     firebaseStatus: state.firebaseStatus,
@@ -256,6 +258,7 @@ function applyPumpStateMessage(state: State, message: PumpStateMessage): State {
   const commandMatches = !message.commandId || state.pendingCommand?.commandId === message.commandId;
   const pendingCommand = commandMatches ? null : state.pendingCommand;
   const nextMode = normalizePumpMode(message.mode || message.source) ?? state.pumpMode;
+  const timestamp = parseOptionalDate(message.timestamp) || new Date();
 
   if (!message.applied) {
     return withVisualState({
@@ -268,26 +271,38 @@ function applyPumpStateMessage(state: State, message: PumpStateMessage): State {
     });
   }
 
-  return withVisualState({
-    ...state,
-    isPumpOn: message.confirmed ? message.pumpOn : state.isPumpOn,
-    pumpMode: nextMode,
-    pendingCommand,
-    lastPumpStatus: message.confirmed
+  return applyEffectivePumpState(
+    {
+      ...state,
+      pumpMode: nextMode,
+      pendingCommand,
+    },
+    {
+      pumpOn: message.pumpOn,
+      applied: true,
+      confirmed: message.confirmed,
+      source: "mqtt_state",
+      mode: message.mode || message.source,
+      commandId: message.commandId,
+      timestamp,
+      overriddenBy: message.overriddenBy,
+      reason: message.reason,
+    },
+    message.confirmed
       ? "Estado confirmado pela bomba"
       : "Comando aplicado sem confirmação física",
-  });
+  );
 }
 
 function withVisualState(state: State): State {
   const visual = estimateVisualWaterLevel(
     state.sensorEvents,
     new Date(),
-    { pumpOn: state.isPumpOn },
+    { pumpOn: state.isPumpOn, confirmed: state.isPumpStateConfirmed },
   );
   const operationalState = deriveOperationalState(
     state.sensorEvents,
-    { pumpOn: state.isPumpOn },
+    { pumpOn: state.isPumpOn, confirmed: state.isPumpStateConfirmed },
   );
   return {
     ...state,
@@ -300,6 +315,131 @@ function withVisualState(state: State): State {
       ? { ...state.lastSensor, operationalState }
       : state.lastSensor,
   };
+}
+
+function withSensorTelemetry(
+  state: State,
+  snapshot: {
+    status: FirebaseConnectionStatus;
+    events: NormalizedSensorEvent[];
+    latestEvent: NormalizedSensorEvent | null;
+    error?: string | null;
+  },
+): State {
+  const latest = snapshot.latestEvent;
+  const lastSensor: LastSensor | null = latest
+    ? {
+        name: latest.sensor,
+        action: latest.estado,
+        date: latest.timestamp.toLocaleDateString("pt-BR"),
+        time: latest.timestamp.toLocaleTimeString("pt-BR", {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+        }),
+        dateTime: formatSensorDateTime(latest.timestamp),
+        operationalState: "Aguardando leitura",
+      }
+    : null;
+
+  let next: State = {
+    ...state,
+    sensorEvents: snapshot.events,
+    lastSensor,
+    firebaseStatus: snapshot.status,
+    firebaseError: snapshot.error || null,
+    isConnected: {
+      ...state.isConnected,
+      firebase: snapshot.status === "connected",
+    },
+  };
+
+  const automaticPumpState = getAutomaticPumpStateFromSensors(snapshot.events);
+  if (automaticPumpState && shouldUseAutomaticFallback(next, automaticPumpState)) {
+    next = applyEffectivePumpState(
+      next,
+      automaticPumpState,
+      automaticPumpState.reason || "Aguardando confirmação do comando automático",
+    );
+  }
+
+  return withVisualState(next);
+}
+
+function applyEffectivePumpState(
+  state: State,
+  pumpState: EffectivePumpState,
+  statusMessage: string | null = null,
+): State {
+  if (!shouldAcceptPumpState(state, pumpState)) {
+    return withVisualState(state);
+  }
+
+  return withVisualState({
+    ...state,
+    isPumpOn: pumpState.pumpOn,
+    isPumpStateConfirmed: pumpState.confirmed,
+    pumpStateSource: pumpState.source,
+    pumpStateUpdatedAt: pumpState.timestamp || new Date(),
+    pumpMode: normalizePumpMode(pumpState.mode) ?? state.pumpMode,
+    pendingCommand: pumpState.commandId
+      ? clearMatchingPendingCommand(state, pumpState.commandId)
+      : state.pendingCommand,
+    lastPumpStatus: statusMessage || pumpState.reason || state.lastPumpStatus,
+  });
+}
+
+function shouldAcceptPumpState(state: State, pumpState: EffectivePumpState): boolean {
+  if (!pumpState.timestamp || !state.pumpStateUpdatedAt) {
+    return true;
+  }
+  return pumpState.timestamp.getTime() >= state.pumpStateUpdatedAt.getTime() - 1000;
+}
+
+function shouldUseAutomaticFallback(state: State, pumpState: EffectivePumpState): boolean {
+  if (state.pumpStateSource === "initial" || state.pumpStateSource === "sensor_automatic") {
+    return shouldAcceptPumpState(state, pumpState);
+  }
+  if (!pumpState.timestamp || !state.pumpStateUpdatedAt) {
+    return false;
+  }
+  return pumpState.timestamp.getTime() > state.pumpStateUpdatedAt.getTime();
+}
+
+function pumpCommandStatus(command: NormalizedPumpCommandEvent | null): string {
+  if (!command) {
+    return "Aguardando comando de bomba";
+  }
+
+  const requested = command.requestedState === false ? "desligar" : "ligar";
+  const mode = command.mode || command.priority || command.source || "comando";
+  if (command.applied === false) {
+    return command.overriddenBy
+      ? `Comando para ${requested} sobreposto por ${command.overriddenBy}`
+      : `Comando para ${requested} não aplicado`;
+  }
+
+  const stateText = command.appliedState ? "ligada" : "desligada";
+  const confirmation = command.confirmed === false
+    ? "sem confirmação física"
+    : "confirmada";
+  return `Bomba ${stateText} por ${mode}; ${confirmation}`;
+}
+
+function clearMatchingPendingCommand(
+  state: State,
+  commandId: string | null | undefined,
+): State["pendingCommand"] {
+  if (!commandId || state.pendingCommand?.commandId !== commandId) {
+    return state.pendingCommand;
+  }
+  return null;
+}
+
+function parseOptionalDate(value: string | undefined): Date | null {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 function normalizePumpMode(value: unknown): PumpMode | null {

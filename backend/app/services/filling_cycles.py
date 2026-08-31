@@ -24,6 +24,10 @@ def is_cycle_end_event(event: Dict[str, Any]) -> bool:
     return _clean_text(event.get("sensor")) == "alto" and _clean_text(event.get("estado")) == "subiu"
 
 
+def is_low_raised_event(event: Dict[str, Any]) -> bool:
+    return _clean_text(event.get("sensor")) == "baixo" and _clean_text(event.get("estado")) == "subiu"
+
+
 def build_filling_cycle(
     start_event: Dict[str, Any],
     end_event: Dict[str, Any],
@@ -36,6 +40,16 @@ def build_filling_cycle(
     fill_time_seconds = (ended_at - started_at).total_seconds()
     if fill_time_seconds <= 0:
         return None
+
+    low_raised_at = _normalize_datetime(start_event.get("low_raised_at"))
+    if not low_raised_at and is_low_raised_event(start_event):
+        low_raised_at = started_at
+    low_to_high_seconds = None
+    pump_to_low_seconds = None
+    if low_raised_at and ended_at > low_raised_at:
+        low_to_high_seconds = (ended_at - low_raised_at).total_seconds()
+    if low_raised_at and low_raised_at > started_at:
+        pump_to_low_seconds = (low_raised_at - started_at).total_seconds()
 
     start_event_id = _event_identity(start_event)
     end_event_id = _event_identity(end_event)
@@ -51,6 +65,10 @@ def build_filling_cycle(
         "ended_at": ended_at,
         "pump_started_at": started_at if _is_pump_command_start(start_event) else None,
         "fill_time_seconds": fill_time_seconds,
+        "low_raised_at": low_raised_at,
+        "low_raised_event_id": start_event.get("low_raised_event_id"),
+        "low_to_high_seconds": low_to_high_seconds,
+        "pump_to_low_seconds": pump_to_low_seconds,
         "valid": True,
         "device_id": end_event.get("device_id") or start_event.get("device_id"),
         "start_source": start_event.get("start_source") or _infer_start_source(start_event),
@@ -60,11 +78,18 @@ def build_filling_cycle(
         "metadata": {
             "start_sensor": start_event.get("sensor"),
             "start_estado": start_event.get("estado"),
+            "start_source_payload": start_event.get("source"),
+            "start_test_run_id": start_event.get("test_run_id"),
             "start_command_id": start_event.get("command_id"),
             "start_applied": start_event.get("applied"),
             "start_confirmed": start_event.get("confirmed"),
+            "low_raised_event_id": start_event.get("low_raised_event_id"),
+            "low_raised_at": low_raised_at,
             "end_sensor": end_event.get("sensor"),
             "end_estado": end_event.get("estado"),
+            "end_source_payload": end_event.get("source"),
+            "end_test_run_id": end_event.get("test_run_id"),
+            "test_run_id": end_event.get("test_run_id") or start_event.get("test_run_id"),
         },
     }
 
@@ -132,6 +157,22 @@ class FillingCycleTracker:
             )
             return None
 
+        if is_low_raised_event(event):
+            pending = self.pending_start_by_device.get(device_key)
+            low_raised_at = _normalize_datetime(event.get("timestamp"))
+            if pending:
+                pending["low_raised_event_id"] = _event_identity(event)
+                pending["low_raised_at"] = low_raised_at
+            else:
+                self.pending_start_by_device[device_key] = {
+                    **event,
+                    "start_source": "sensor_low_raised_fallback",
+                    "event_type": "sensor",
+                    "low_raised_event_id": _event_identity(event),
+                    "low_raised_at": low_raised_at,
+                }
+            return None
+
         if not is_cycle_end_event(event):
             return None
 
@@ -167,7 +208,10 @@ def _cycle_summary(cycle: Dict[str, Any], *, duplicate: bool) -> Dict[str, Any]:
         "start_event_id": cycle["start_event_id"],
         "end_event_id": cycle["end_event_id"],
         "fill_time_seconds": cycle["fill_time_seconds"],
+        "low_to_high_seconds": cycle.get("low_to_high_seconds"),
+        "pump_to_low_seconds": cycle.get("pump_to_low_seconds"),
         "valid": cycle["valid"],
+        "start_source": cycle.get("start_source"),
         "duplicate": duplicate,
     }
 
@@ -238,4 +282,15 @@ def _normalize_datetime(value: Any) -> Optional[datetime]:
         if value.tzinfo is None:
             return value.replace(tzinfo=timezone.utc)
         return value.astimezone(timezone.utc)
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        try:
+            parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
     return None

@@ -2,6 +2,8 @@ import os
 import statistics
 from typing import Any, Dict, Iterable, List, Optional
 
+from .autocloud_core import run_autocloud_for_filling_cycle
+
 
 def analyze_fill_time_cycle(
     cycle: Dict[str, Any],
@@ -10,6 +12,7 @@ def analyze_fill_time_cycle(
     min_samples: Optional[int] = None,
     slow_factor: Optional[float] = None,
     persistent_window: Optional[int] = None,
+    m: Optional[float] = None,
 ) -> Dict[str, Any]:
     min_samples = min_samples if min_samples is not None else _env_int("FILL_TIME_MIN_SAMPLES", 5)
     slow_factor = slow_factor if slow_factor is not None else _env_float("FILL_TIME_SLOW_FACTOR", 1.5)
@@ -17,23 +20,31 @@ def analyze_fill_time_cycle(
         "FILL_TIME_PERSISTENT_WINDOW",
         3,
     )
+    m = m if m is not None else _env_float("AUTOCLOUD_M", 2.5)
 
-    durations = [
-        float(item["fill_time_seconds"])
+    valid_historical_cycles = [
+        item
         for item in historical_cycles
         if item.get("valid") and item.get("fill_time_seconds") is not None
     ]
+    durations = [float(item["fill_time_seconds"]) for item in valid_historical_cycles]
     current = float(cycle["fill_time_seconds"])
 
     if len(durations) < min_samples:
         return {
             "used": False,
             "reason": "insufficient_data",
+            "method": "autocloud_filling_cycle_clustering",
             "samples": len(durations),
             "required_samples": min_samples,
             "alert": None,
         }
 
+    autocloud_result = run_autocloud_for_filling_cycle(
+        cycle,
+        valid_historical_cycles,
+        m=m,
+    )
     baseline_median = statistics.median(durations)
     baseline_mean = statistics.fmean(durations)
     baseline_stdev = statistics.pstdev(durations) if len(durations) > 1 else 0.0
@@ -48,12 +59,22 @@ def analyze_fill_time_cycle(
         "sensor alto demorando a acionar",
     ]
     metadata: Dict[str, Any] = {
-        "method": "fill_time_temporal_baseline",
+        "method": "autocloud_filling_cycle_clustering",
+        "baseline_method": "fill_time_temporal_baseline",
         "baseline_median_seconds": baseline_median,
         "baseline_mean_seconds": baseline_mean,
         "baseline_stdev_seconds": baseline_stdev,
         "current_fill_time_seconds": current,
         "samples": len(durations),
+        "autocloud_m": m,
+        "class_index": autocloud_result["class_index"],
+        "cloud_count": autocloud_result["cloud_count"],
+        "created_cloud": autocloud_result["created_cloud"],
+        "accepted_by_existing_cloud": autocloud_result["accepted_by_existing_cloud"],
+        "nearest_cloud_index": autocloud_result["nearest_cloud_index"],
+        "nearest_distance": autocloud_result["nearest_distance"],
+        "nearest_normalized_distance": autocloud_result["nearest_normalized_distance"],
+        "feature_metadata": autocloud_result["feature_metadata"],
     }
 
     if baseline_median > 0 and current >= baseline_median * slow_factor:
@@ -83,13 +104,33 @@ def analyze_fill_time_cycle(
         alert_type = "new_fill_time_cluster"
         metadata["z_score"] = (current - baseline_mean) / baseline_stdev
 
+    cluster_distance = autocloud_result.get("nearest_normalized_distance")
+    if (
+        alert_type is None
+        and autocloud_result.get("created_cloud")
+        and isinstance(cluster_distance, (int, float))
+        and cluster_distance >= m
+        and baseline_median > 0
+        and current >= baseline_median * 1.2
+    ):
+        alert_type = "new_fill_time_cluster"
+        metadata["cluster_distance_threshold"] = m
+
     if alert_type is None:
         return {
             "used": True,
             "reason": "normal_fill_time",
+            "method": "autocloud_filling_cycle_clustering",
             "samples": len(durations),
             "baseline_median_seconds": baseline_median,
+            "baseline_mean_seconds": baseline_mean,
+            "baseline_stdev_seconds": baseline_stdev,
             "current_fill_time_seconds": current,
+            "class_index": autocloud_result["class_index"],
+            "cloud_count": autocloud_result["cloud_count"],
+            "created_cloud": autocloud_result["created_cloud"],
+            "nearest_normalized_distance": autocloud_result["nearest_normalized_distance"],
+            "feature_metadata": autocloud_result["feature_metadata"],
             "alert": None,
         }
 
@@ -113,9 +154,17 @@ def analyze_fill_time_cycle(
     return {
         "used": True,
         "reason": alert_type,
+        "method": "autocloud_filling_cycle_clustering",
         "samples": len(durations),
         "baseline_median_seconds": baseline_median,
+        "baseline_mean_seconds": baseline_mean,
+        "baseline_stdev_seconds": baseline_stdev,
         "current_fill_time_seconds": current,
+        "class_index": autocloud_result["class_index"],
+        "cloud_count": autocloud_result["cloud_count"],
+        "created_cloud": autocloud_result["created_cloud"],
+        "nearest_normalized_distance": autocloud_result["nearest_normalized_distance"],
+        "feature_metadata": autocloud_result["feature_metadata"],
         "alert": alert,
     }
 

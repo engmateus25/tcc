@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useHistory } from "react-router-dom";
 import { 
-  ArrowLeft, Download, Calendar, TrendingDown,
-  Droplets, Zap, MessageSquare,
+  Activity, ArrowLeft, Download, Calendar, TrendingDown,
+  Droplets, Zap,
 } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
@@ -21,6 +21,12 @@ import {
   ReportPeriod,
   ReportSummary,
 } from "../services/reportService";
+
+const periodOptions: Array<{ value: ReportPeriod; label: string }> = [
+  { value: "7d", label: "7 dias" },
+  { value: "30d", label: "30 dias" },
+  { value: "90d", label: "90 dias" },
+];
 
 
 export function HistoryPage() {
@@ -166,43 +172,61 @@ export function HistoryPage() {
         </Card>
       </div>
 
-      {/* Seletor de Período */}
       <Card className="p-4 mb-6">
         <div className="flex items-center gap-2 mb-3">
           <Calendar className="w-4 h-4 text-slate-600" />
           <span className="text-sm text-slate-700">Período:</span>
         </div>
-        <div className="grid grid-cols-3 gap-2">
-          <Button
-            variant={selectedPeriod === "7d" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setSelectedPeriod("7d")}
-          >
-            7 dias
-          </Button>
-          <Button
-            variant={selectedPeriod === "30d" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setSelectedPeriod("30d")}
-          >
-            30 dias
-          </Button>
-          <Button
-            variant={selectedPeriod === "90d" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setSelectedPeriod("90d")}
-          >
-            90 dias
-          </Button>
+        <div data-testid="period-filter" className="grid grid-cols-3 gap-2">
+          {periodOptions.map((option) => {
+            const active = selectedPeriod === option.value;
+            return (
+              <Button
+                key={option.value}
+                type="button"
+                variant="outline"
+                size="sm"
+                aria-pressed={active}
+                onClick={() => setSelectedPeriod(option.value)}
+                className={
+                  active
+                    ? "border-blue-600 bg-blue-600 text-white shadow-sm hover:bg-blue-700"
+                    : "border-slate-200 bg-white text-slate-700 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 focus-visible:ring-blue-300"
+                }
+              >
+                {option.label}
+              </Button>
+            );
+          })}
         </div>
       </Card>
 
-      {/* Tabs com Gráficos */}
       <Tabs defaultValue="water" className="mb-6">
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="water">Água</TabsTrigger>
-          <TabsTrigger value="energy">Energia</TabsTrigger>
-          <TabsTrigger value="sensors">Sensores</TabsTrigger>
+        <TabsList
+          data-testid="history-type-filter"
+          className="grid h-auto w-full grid-cols-1 gap-2 rounded-lg border border-slate-200 bg-white p-2 shadow-sm sm:grid-cols-3"
+        >
+          <TabsTrigger
+            value="water"
+            className="min-h-11 rounded-md border border-blue-100 bg-blue-50 text-blue-700 hover:border-blue-300 hover:bg-blue-100 focus-visible:ring-blue-300 data-[state=active]:border-blue-600 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm"
+          >
+            <Droplets className="h-4 w-4" />
+            Água
+          </TabsTrigger>
+          <TabsTrigger
+            value="energy"
+            className="min-h-11 rounded-md border border-yellow-200 bg-yellow-50 text-yellow-800 hover:border-yellow-300 hover:bg-yellow-100 focus-visible:ring-yellow-300 data-[state=active]:border-yellow-600 data-[state=active]:bg-yellow-500 data-[state=active]:text-slate-950 data-[state=active]:shadow-sm"
+          >
+            <Zap className="h-4 w-4" />
+            Energia
+          </TabsTrigger>
+          <TabsTrigger
+            value="sensors"
+            className="min-h-11 rounded-md border border-teal-100 bg-teal-50 text-teal-700 hover:border-teal-300 hover:bg-teal-100 focus-visible:ring-teal-300 data-[state=active]:border-teal-700 data-[state=active]:bg-teal-700 data-[state=active]:text-white data-[state=active]:shadow-sm"
+          >
+            <Activity className="h-4 w-4" />
+            Sensores
+          </TabsTrigger>
         </TabsList>
 
         {/* Gráfico de Consumo de Água */}
@@ -282,30 +306,6 @@ export function HistoryPage() {
         </TabsContent>
       </Tabs>
 
-      {/* Chatbot Placeholder */}
-      <Card className="p-4 bg-slate-50 border-slate-200">
-        <div className="flex items-start gap-3">
-          <div className="p-2 bg-slate-700 rounded-md">
-            <MessageSquare className="w-5 h-5 text-white" />
-          </div>
-          <div className="flex-1">
-            <h3 className="text-sm text-slate-800 mb-1">Assistente IA</h3>
-            <p className="text-xs text-slate-600 mb-3">
-              Analise os dados do período atual com perguntas em linguagem natural.
-            </p>
-            <Button
-              variant="default"
-              size="sm"
-              className="bg-slate-700 hover:bg-slate-800"
-              onClick={() => history.push("/chat")}
-            >
-              Abrir Chat
-            </Button>
-          </div>
-        </div>
-      </Card>
-
-      {/* Insights */}
       <Card className="p-4 mt-6 bg-slate-50 border-slate-200">
         <h3 className="text-sm text-slate-700 mb-3">Insights</h3>
         <ul className="space-y-2 text-sm text-slate-600">
