@@ -113,6 +113,7 @@ function AlertRow({
   onAcknowledge: (alertId: string) => void;
 }) {
   const Icon = alert.type.includes("fill") ? Activity : AlertTriangle;
+  const autocloudMetrics = getAutoCloudMetrics(alert);
 
   return (
     <article className="rounded-md border border-slate-200 bg-slate-50 px-3 py-3">
@@ -131,6 +132,20 @@ function AlertRow({
 
           {alert.message && (
             <p className="mt-1 text-sm text-slate-600">{alert.message}</p>
+          )}
+
+          {autocloudMetrics.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {autocloudMetrics.map((metric) => (
+                <span
+                  key={metric.label}
+                  className="rounded-sm border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700"
+                >
+                  <span className="font-medium text-slate-500">{metric.label}: </span>
+                  {metric.value}
+                </span>
+              ))}
+            </div>
           )}
 
           <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
@@ -158,6 +173,81 @@ function AlertRow({
       </div>
     </article>
   );
+}
+
+function getAutoCloudMetrics(alert: AquaAlert) {
+  if (!isAutoCloudAlert(alert.type)) {
+    return [];
+  }
+
+  const metadata = alert.metadata || {};
+  const currentSeconds = readNumber(metadata.current_fill_time_seconds);
+  const baselineSeconds = readNumber(metadata.baseline_median_seconds);
+  const differenceSeconds = readNumber(metadata.current_vs_median_seconds);
+  const differencePercent = readNumber(metadata.current_vs_median_percent);
+  const normalizedDistance = readNumber(metadata.nearest_normalized_distance);
+
+  return [
+    currentSeconds !== null && {
+      label: "Observado",
+      value: `${formatDuration(currentSeconds)} (${Math.round(currentSeconds)} s)`,
+    },
+    baselineSeconds !== null && {
+      label: "Padrao",
+      value: `${formatDuration(baselineSeconds)} (${Math.round(baselineSeconds)} s)`,
+    },
+    differenceSeconds !== null && {
+      label: "Diferenca",
+      value: `${formatSignedDuration(differenceSeconds)}${
+        differencePercent !== null ? ` (${formatSignedPercent(differencePercent)})` : ""
+      }`,
+    },
+    normalizedDistance !== null && {
+      label: "Distancia",
+      value: normalizedDistance.toFixed(2),
+    },
+  ].filter(Boolean) as Array<{ label: string; value: string }>;
+}
+
+function isAutoCloudAlert(type: string) {
+  return [
+    "slow_fill_cycle",
+    "persistent_fill_time_shift",
+    "new_fill_time_cluster",
+  ].includes(type);
+}
+
+function readNumber(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  return null;
+}
+
+function formatDuration(seconds: number) {
+  const totalSeconds = Math.max(0, Math.round(seconds));
+  const minutes = Math.floor(totalSeconds / 60);
+  const remainingSeconds = totalSeconds % 60;
+  if (minutes <= 0) {
+    return `${remainingSeconds}s`;
+  }
+  return `${minutes}min ${String(remainingSeconds).padStart(2, "0")}s`;
+}
+
+function formatSignedDuration(seconds: number) {
+  const sign = seconds >= 0 ? "+" : "-";
+  return `${sign}${formatDuration(Math.abs(seconds))}`;
+}
+
+function formatSignedPercent(value: number) {
+  const sign = value >= 0 ? "+" : "";
+  return `${sign}${value.toFixed(1).replace(".", ",")}%`;
 }
 
 function AlertSkeleton() {

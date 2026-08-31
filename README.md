@@ -160,14 +160,21 @@ Para validar gatilhos reais nas colecoes operacionais `sensores` e `comandos`, u
 
 ### Seed do AutoCloud para PIBITI
 
-O script `backend/scripts/seed_autocloud_firestore.py` grava cinco ciclos normais na colecao `autocloud_filling_samples`, valida um ciclo normal sem alerta, processa um ciclo lento para gerar `slow_fill_cycle` e processa um caso de intertravamento para gerar `unexpected_high_without_low`.
+O script `backend/scripts/seed_autocloud_firestore.py` grava cinco ciclos normais na colecao `autocloud_filling_samples`, valida um ciclo normal sem alerta, processa um ciclo lento para gerar `slow_fill_cycle` e, por padrao, processa um caso de intertravamento para gerar `unexpected_high_without_low`.
 
 ```bash
 cd backend
 .venv/bin/python scripts/seed_autocloud_firestore.py
 ```
 
-Na validacao de 31/08/2026, foi gravado o `test_run_id=pibiti-20260831-103355`. Esse identificador pode ser usado no console do Firebase para localizar as amostras e alertas demonstrativos.
+Para gerar apenas um alerta lento para captura de tela, usando a baseline ja existente no Firestore e sem criar o alerta de intertravamento:
+
+```bash
+cd backend
+.venv/bin/python scripts/seed_autocloud_firestore.py --use-existing-baseline --skip-baseline --skip-interlock --slow-fill-seconds 960
+```
+
+Na validacao de 31/08/2026, foi gravado o `test_run_id=pibiti-20260831-144602` para um ciclo lento de 960 s. A execucao usou 12 amostras historicas existentes, mediana de 482,5 s, diferenca de 477,5 s, aumento aproximado de 99,0%, distancia normalizada de 90,76 e gerou `slow_fill_cycle` sem criar intertravamento. Esse identificador pode ser usado no console do Firebase para localizar as amostras e alertas demonstrativos.
 
 ### Variaveis de ambiente do backend
 

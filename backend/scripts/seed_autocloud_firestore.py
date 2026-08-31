@@ -18,6 +18,7 @@ from app.services.autocloud_core import (  # noqa: E402
 from app.services.autocloud_fill_time import analyze_fill_time_cycle  # noqa: E402
 from app.services.autocloud_samples import (  # noqa: E402
     AUTOCLOUD_SAMPLES_COLLECTION,
+    fetch_autocloud_filling_samples,
     save_autocloud_filling_sample,
 )
 from app.services.sensor_realtime import SensorRealtimeEngine  # noqa: E402
@@ -124,6 +125,8 @@ def validate_and_persist_alerts(
     base: datetime,
     device_id: str,
     source: str,
+    slow_fill_seconds: int,
+    include_interlock: bool,
     dry_run: bool,
 ) -> Dict[str, Any]:
     normal_cycle = build_cycle(
@@ -138,7 +141,7 @@ def validate_and_persist_alerts(
     normal_analysis = analyze_fill_time_cycle(normal_cycle, baseline_cycles, min_samples=5)
 
     slow_started_at = base + timedelta(hours=3)
-    slow_high_at = slow_started_at + timedelta(seconds=900)
+    slow_high_at = slow_started_at + timedelta(seconds=slow_fill_seconds)
     slow_history = [
         build_sensor_event(
             test_run_id,
@@ -200,8 +203,8 @@ def validate_and_persist_alerts(
                 "started_at": slow_started_at,
                 "low_raised_at": slow_history[1]["timestamp"],
                 "ended_at": slow_high_at,
-                "fill_time_seconds": 900,
-                "low_to_high_seconds": 840,
+                "fill_time_seconds": slow_fill_seconds,
+                "low_to_high_seconds": slow_fill_seconds - 60,
                 "pump_to_low_seconds": 60,
                 "valid": True,
                 "device_id": device_id,
@@ -213,7 +216,11 @@ def validate_and_persist_alerts(
         return {
             "normal_analysis": normal_analysis,
             "slow_result": {"autocloud": slow_analysis, "alerts_created": [slow_analysis.get("alert")]},
-            "interlock_result": {"alerts_created": [{"type": "unexpected_high_without_low"}]},
+            "interlock_result": {
+                "alerts_created": [{"type": "unexpected_high_without_low"}]
+                if include_interlock
+                else []
+            },
         }
 
     slow_result = SensorRealtimeEngine().process_event(
@@ -222,11 +229,15 @@ def validate_and_persist_alerts(
         command_history=[],
         historical_autocloud_samples=baseline_cycles,
     )
-    interlock_result = SensorRealtimeEngine().process_event(
-        interlock_event,
-        history=interlock_history,
-        command_history=[],
-        historical_autocloud_samples=baseline_cycles,
+    interlock_result = (
+        SensorRealtimeEngine().process_event(
+            interlock_event,
+            history=interlock_history,
+            command_history=[],
+            historical_autocloud_samples=baseline_cycles,
+        )
+        if include_interlock
+        else {"alerts_created": []}
     )
 
     return {
@@ -242,12 +253,16 @@ def main() -> None:
     )
     parser.add_argument("--test-run-id", default=datetime.now(timezone.utc).strftime("pibiti-%Y%m%d-%H%M%S"))
     parser.add_argument("--device-id", default="esp32-reservatorio-01")
+    parser.add_argument("--slow-fill-seconds", type=int, default=900)
+    parser.add_argument("--skip-baseline", action="store_true")
+    parser.add_argument("--skip-interlock", action="store_true")
+    parser.add_argument("--use-existing-baseline", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
     source = "pibiti_autocloud_validation"
     base = datetime.now(timezone.utc).replace(microsecond=0) - timedelta(hours=8)
-    baseline_cycles = [
+    seeded_baseline_cycles = [
         build_cycle(
             args.test_run_id,
             index,
@@ -259,17 +274,43 @@ def main() -> None:
         )
         for index, seconds in enumerate(DEFAULT_BASELINE_SECONDS, start=1)
     ]
+    baseline_cycles = seeded_baseline_cycles
+    baseline_source = "script_seed"
+
+    if args.use_existing_baseline:
+        baseline_before = base + timedelta(hours=3, seconds=args.slow_fill_seconds)
+        existing_samples = fetch_autocloud_filling_samples(
+            device_id=args.device_id,
+            before=baseline_before,
+            limit=200,
+        )
+        if len(existing_samples) >= 5:
+            baseline_cycles = existing_samples
+            baseline_source = "firestore_existing_samples"
+        elif args.skip_baseline:
+            raise SystemExit(
+                "Nao ha amostras historicas suficientes no Firestore "
+                f"({len(existing_samples)}/5). Rode sem --skip-baseline para semear a base."
+            )
 
     print(f"test_run_id={args.test_run_id}")
     print(f"device_id={args.device_id}")
     print(f"collection={AUTOCLOUD_SAMPLES_COLLECTION}")
-    saved = seed_baseline_samples(baseline_cycles, dry_run=args.dry_run)
+    print(f"baseline_source={baseline_source}")
+    print(f"baseline_samples_available={len(baseline_cycles)}")
+    saved = (
+        []
+        if args.skip_baseline
+        else seed_baseline_samples(seeded_baseline_cycles, dry_run=args.dry_run)
+    )
     results = validate_and_persist_alerts(
         args.test_run_id,
         baseline_cycles,
         base=base,
         device_id=args.device_id,
         source=source,
+        slow_fill_seconds=args.slow_fill_seconds,
+        include_interlock=not args.skip_interlock,
         dry_run=args.dry_run,
     )
 
@@ -284,9 +325,25 @@ def main() -> None:
         "slow_cycle_nearest_normalized_distance="
         f"{(slow.get('autocloud') or {}).get('nearest_normalized_distance')}"
     )
+    _print_slow_metrics(slow.get("autocloud") or {})
     print(f"slow_alerts_created={[item.get('type') for item in slow.get('alerts_created', []) if item]}")
     print(f"interlock_alerts_created={[item.get('type') for item in interlock.get('alerts_created', []) if item]}")
     print("Abra a Home e atualize o painel de Alertas Inteligentes para capturar os alertas abertos.")
+
+
+def _print_slow_metrics(analysis: Dict[str, Any]) -> None:
+    current = analysis.get("current_fill_time_seconds")
+    baseline = analysis.get("baseline_median_seconds")
+    difference = analysis.get("current_vs_median_seconds")
+    percent = analysis.get("current_vs_median_percent")
+    if current is not None:
+        print(f"slow_cycle_observed_seconds={current}")
+    if baseline is not None:
+        print(f"slow_cycle_baseline_median_seconds={baseline}")
+    if difference is not None:
+        print(f"slow_cycle_difference_seconds={difference}")
+    if percent is not None:
+        print(f"slow_cycle_difference_percent={percent}")
 
 
 if __name__ == "__main__":

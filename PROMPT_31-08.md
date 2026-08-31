@@ -1,131 +1,120 @@
-Implemente as alterações abaixo no projeto. O contexto técnico e as boas práticas já estão documentados  no `AGENTS.md` deste diretório.
+Essafoi a saida daúltima tarefa que o codex implementou:
 
-### 1. Reorganização responsiva da Home na versão web
+• Implementei o AutoCloud funcional e corrigi a regressão do intertravamento.
 
-Reorganize a Home somente em telas de computador e notebook, utilizando os breakpoints e padrões responsivos já existentes no projeto. Não altere negativamente o layout mobile.
+  O Que Mudou
 
-Nas telas web, aproveite melhor o espaço horizontal por meio de uma composição em duas colunas:
+  - AutoCloud agora usa o núcleo em backend/app/services/autocloud_core.py:313, com vetor normalizado por mediana/escala robusta:
+    fill_time_seconds, low_to_high_seconds, pump_to_low_seconds, start_source_score, sensor_sequence_score.
 
-* Na coluna esquerda, concentre os componentes iniciais da Home até a visualização do nível do reservatório.
-* Na coluna direita, organize:
+  - A análise em backend/app/services/autocloud_fill_time.py:43 agora retorna classe, nuvens, distância normalizada, created_cloud e metadados do vetor.
+  - Criei a coleção técnica autocloud_filling_samples via backend/app/services/autocloud_samples.py:12.
+  - O fluxo real em backend/app/services/sensor_realtime.py:189 busca baseline nessa coleção e salva nova amostra quando fecha ciclo.
+  - O ciclo agora registra baixo subiu e calcula low_to_high_seconds em backend/app/services/filling_cycles.py:27.
+  - Corrigi a busca de histórico para aceitar timestamp ISO/string e timestamp nativo no Firestore em backend/app/services/firestore.py:204. Isso resolve a falha prática do baixo
+    desceu -> alto subiu.
 
-  * botões de Histórico e Assistente IA, preferencialmente próximos ao topo;
-  * último sensor alterado;
-  * controle da bomba;
-  * modo de acionamento;
-  * energia da bomba.
+  - Adicionei o script backend/scripts/seed_autocloud_firestore.py:91.
 
-A ordem e as dimensões podem ser refinadas de acordo com o que produzir o melhor resultado visual. Evite cards excessivamente largos, grandes espaços vazios e a simples distribuição de poucos componentes por toda a largura. O layout deve funcionar adequadamente em diferentes resoluções de notebooks e monitores.
+  Firestore
+  Gravei dados reais com:
 
-A identificação da versão web deve ser feita pelas dimensões da viewport e pelos breakpoints da aplicação, não pelo sistema operacional ou pelo navegador.
+  test_run_id=pibiti-20260831-103355
+  collection=autocloud_filling_samples
 
-### 2. Comportamento da barra superior
+  Resultado:
 
-A barra azul com o título “AquaMonitor”, subtítulo e botão de ajuda não deve permanecer fixa durante a rolagem.
+  - 5 ciclos normais de baseline gravados.
+  - 1 ciclo anômalo adicional salvo após alerta.
+  - interlock_alerts_created=['unexpected_high_without_low']
 
-Ela deve:
+  O endpoint /alerts retornou os alertas abertos para a interface, incluindo:
 
-* aparecer normalmente quando a página estiver no topo;
-* sair da área visível conforme o usuário rolar a página para baixo;
-* voltar a aparecer quando o usuário retornar ao topo.
+  - slow_fill_cycle com created_cloud=true, cloud_count=2, distância normalizada 67.08.
+  - unexpected_high_without_low.
 
-Remova o comportamento `fixed` ou `sticky` e faça a barra participar do fluxo normal da página. Aplique o ajuste nas telas em que esse cabeçalho compartilhado é utilizado, verificando que o conteúdo não fique com margens ou espaços superiores incorretos.
+  Também validei por POST real em /alerts/sensor-event: baixo desceu -> alto subiu retornou e persistiu unexpected_high_without_low.
 
-### 3. Sincronização visual do estado da bomba
+  Validação
 
-Corrija a origem e a atualização do estado da bomba na interface. Atualmente, quando a bomba é ligada automaticamente pela lógica dos sensores, o sistema inicia a contagem do enchimento e das métricas de energia, mas continua mostrando a bomba como desligada.
+  - cd backend && .venv/bin/pytest: 70 passed.
+  - cd backend && .venv/bin/python -m compileall app tests scripts: ok.
+  - git diff --check: ok.
+  - Seed real no Firestore: ok.
+  - Consulta direta da coleção: 6 amostras para o test_run_id, sendo 5 baseline + 1 anômala.
+  - Backend local foi iniciado para validação e encerrado ao final.
 
-Quando a bomba estiver efetivamente ligada, independentemente de o acionamento ter sido automático, remoto ou físico, todas as representações devem ser atualizadas de maneira consistente:
+  Não rodei build do frontend nesta etapa porque a mudança foi backend/Firestore; os arquivos frontend pendentes no git status são da tarefa anterior.
 
-* card de resumo acima do reservatório;
-* indicador e botão ON/OFF do controle da bomba;
-* campo “Estado atual” em Energia da bomba;
-* cores, textos e demais indicadores relacionados.
+  Observação
+  Há alertas demonstrativos abertos no Firebase para screenshot. A validação HTTP também gerou um unexpected_low_repeat, porque já havia histórico real anterior de baixo desceu; o
+  intertravamento específico foi gerado corretamente em seguida.
 
-Não faça apenas uma correção visual isolada. Investigue o fluxo completo entre eventos dos sensores, acionamento aplicado, estado confirmado, backend, MQTT e atualização do frontend. Use uma única fonte confiável para representar o estado operacional da bomba e evite que o botão mostre somente o último comando manual.
+  Suggested semantic commit
 
-Valide, no mínimo, o fluxo observado no teste:
+  feat(autocloud): cluster filling cycles from normalized sensor timing vectors
+  fix(alerts): restore interlock detection with firestore timestamp fallback
+  test(autocloud): cover seeded samples and realtime anomaly alerts
+  docs(readme): document autocloud firestore baseline validation
 
-1. sensor alto desceu;
-2. sensor baixo desceu;
-3. sensor baixo subiu;
-4. a bomba liga automaticamente;
-5. todas as áreas da interface passam a indicar que ela está ligada.
 
-Quando a bomba desligar, os mesmos componentes devem voltar ao estado desligado.
 
-### 4. Alerta determinístico de intertravamento dos sensores
 
-Revise as regras de sequência dos sensores. O sistema não está gerando alerta para a seguinte sequência inválida:
+No tópico de metodologia para o meu PIBITI:
+\section{Análise temporal com AutoCloud para ciclos de enchimento}
 
-1. sensor baixo desceu;
-2. sensor alto subiu sem que o sensor baixo tenha subido antes.
+O ciclo de enchimento representa o intervalo entre o início efetivo do bombeamento e a chegada da água ao limite superior. Para determinar o instante inicial, o \textit{backend} procura prioritariamente um comando de ligação aplicado e confirmado. Quando essa confirmação não está disponível, utiliza-se como referência a transição de subida da boia inferior. O encerramento ocorre quando a boia superior é acionada e indica o nível alto. Assim, o tempo é calculado por:
 
-Essa transição não representa uma evolução física válida do nível. A sequência esperada para o enchimento é:
+\begin{equation}
+    t_{enchimento} = t_{alto\,acionado} - t_{início\,confirmado}.
+\end{equation}
 
-1. sensor baixo desceu;
-2. sensor baixo subiu;
-3. sensor alto subiu.
+O ciclo é descartado quando não possui horários válidos, quando o término ocorre antes do início ou quando algum de seus eventos é bloqueado pelas regras determinísticas. Para os ciclos aceitos, são armazenados os identificadores dos eventos de início e término, os horários, a duração, o dispositivo de origem e os metadados necessários à auditoria.
 
-Portanto, se o sensor alto subir enquanto o sistema ainda registra o sensor baixo como não acionado, deve ser criado um alerta determinístico de intertravamento. O alerta precisa ser persistido e exibido em “Alertas inteligentes”, respeitando os mecanismos existentes de idempotência, reconhecimento e prevenção de duplicidades.
+O algoritmo AutoCloud atua somente após o fechamento de um ciclo válido. A duração recém-calculada é comparada com o histórico do mesmo tipo de ciclo, evitando que eventos isolados ou incoerentes componham a linha de base. A análise começa quando existem pelo menos cinco ciclos históricos válidos. A Tabela~\ref{tab:parametros_autocloud} apresenta as condições utilizadas para classificar o comportamento temporal.
 
-Revise também as regras relacionadas para garantir que o estado anterior realmente utilizado na validação corresponde ao estado atual confirmado dos dois sensores.
+\begin{table}[H]
+    \centering
+    \caption{Critérios empregados na análise temporal dos ciclos de enchimento.}
+    \label{tab:parametros_autocloud}
+    \small
+    \begin{tabular}{|p{4.2cm}|p{5.6cm}|p{4.2cm}|}
+        \hline
+        \textbf{Resultado} & \textbf{Critério} & \textbf{Interpretação} \\ \hline
+        Dados insuficientes & Menos de cinco ciclos históricos válidos. & Mantém o registro sem emitir conclusão temporal. \\ \hline
+        Tempo normal & Duração compatível com o comportamento histórico. & Não gera alerta de anomalia. \\ \hline
+        Ciclo lento & Duração atual igual ou superior a 1,5 vez a mediana histórica. & Indica aumento pontual do tempo de enchimento. \\ \hline
+        Mudança persistente & Crescimento progressivo nas três durações mais recentes. & Indica alteração gradual do padrão. \\ \hline
+        Novo agrupamento temporal & Duração superior à média histórica acrescida de três desvios padrão. & Indica comportamento distante da distribuição anterior. \\ \hline
+    \end{tabular}
+    \legend{Fonte: O autor.}
+\end{table}
 
-### 5. Filtros de Histórico e Estatísticas
+Quando uma condição anômala é encontrada, o resultado se torna um alerta disponível na aplicação. A mensagem apresenta o comportamento observado, o método não estabelece diagnóstico definitivo, sua função é destacar desvios que justificam inspeção e acompanhamento.
 
-Melhore a aparência e a usabilidade dos filtros:
 
-* períodos: 7, 30 e 90 dias;
-* tipos: Água, Energia e Sensores.
 
-Atualmente, principalmente “Água”, “Energia” e “Sensores” parecem textos comuns e não deixam claro que são clicáveis.
+No tópico de resultados:
+\section{Detecção de anomalias e AutoCloud}
 
-Transforme cada opção em um controle visualmente identificável, com:
+As regras determinísticas foram aplicadas antes da análise temporal para identificar sequências incompatíveis com o comportamento esperado das boias. Eventos duplicados, fora de ordem ou sem horário confiável foram sinalizados e impedidos de participar da formação dos ciclos de enchimento. Esse procedimento evitou que registros incoerentes alterassem a análise do tempo entre os níveis inferior e superior.
 
-* contorno ou container;
-* área clicável adequada;
-* estados de `hover`, foco e seleção;
-* boa legibilidade e acessibilidade;
-* adaptação às versões web e mobile.
+O AutoCloud foi executado sobre a variável \texttt{fill\_time\_seconds}. Nos testes realizados, o módulo processou os ciclos válidos e permitiu comparar novos tempos de enchimento com o comportamento registrado anteriormente. A integração possibilitou classificar o ciclo analisado e gerar um alerta quando o tempo se afastava do padrão histórico. Os valores quantitativos e a descrição do cenário final deverão ser inseridos após a consolidação dos experimentos.
 
-Mesmo antes da seleção, deve ficar evidente que cada item é clicável. Depois do clique, somente a opção ativa deve receber um destaque mais forte, deixando clara a seleção. Substitua o barramento preto atual por uma solução visual mais coerente com o restante da interface.
+% TODO: informar quantidade de ciclos, tempos observados e anomalia simulada.
+% PRODUZIR CAPTURA do alerta e, se possível, do histórico de tempos de enchimento.
+% Nome do arquivo: figs/autocloud_alerta_tempo_enchimento.png
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\linewidth]{figs/autocloud_alerta_tempo_enchimento.png}
+    \caption{Exemplo de análise temporal e alerta produzido a partir do tempo de enchimento.}
+    \legend{Fonte: O autor.}
+    \label{fig:autocloud_alerta_tempo_enchimento}
+\end{figure}
 
-### 6. Remoção do bloco de Assistente IA do histórico
+Os alertas apresentaram a condição identificada e possíveis causas relacionadas ao domínio físico, sem tratar a anomalia como diagnóstico definitivo. Dessa forma, o AutoCloud atuou como recurso de apoio para destacar mudanças que exigem verificação do usuário.
 
-Remova da tela “Histórico e Estatísticas” o bloco localizado abaixo dos gráficos que contém:
 
-* “Assistente IA”;
-* “Analise os dados do período atual com perguntas em linguagem natural”;
-* opção “Abrir Chat”.
+Tópico para o autocloud na Conclusão:
 
-Esse bloco é desnecessário. Não remova o botão de acesso ao Assistente IA existente na Home nem a rota e as funcionalidades do chatbot.
-
-### 7. Correção do PDF
-
-Corrija a geração do relatório PDF de Histórico e Estatísticas. Nos campos “Alertas recentes” e “Observações”, títulos, descrições e demais textos estão sobrepostos.
-
-Ajuste:
-
-* altura dinâmica dos itens conforme a quantidade de texto;
-* quebra automática de linhas;
-* espaçamento entre título, descrição, status e próximo alerta;
-* espaçamento entre o cabeçalho “Observações” e seu conteúdo;
-* margens e altura de linha;
-* quebra de página quando o conteúdo não couber no espaço restante.
-
-Nenhum texto pode ficar sobreposto, cortado ou fora da área da página. Valide o PDF com textos curtos e longos, vários alertas, nenhum alerta e os diferentes períodos disponíveis. Mantenha a paginação organizada, evitando páginas extras ou grandes espaços vazios quando for possível posicionar o conteúdo de forma segura.
-
-### Validação final
-
-Após implementar:
-
-* preserve o funcionamento da versão mobile;
-* valide a Home em mais de uma resolução web;
-* confirme o desaparecimento natural do cabeçalho durante a rolagem;
-* teste o acionamento automático da bomba e a sincronização de todos os indicadores;
-* teste a sequência inválida dos sensores e a criação do alerta;
-* confira os estados dos filtros;
-* gere e inspecione o PDF corrigido;
-* execute os testes, verificações de tipos e build disponíveis no projeto.
-
-Ao final, apresente um resumo das alterações realizadas, arquivos modificados, testes executados e qualquer limitação ou pendência encontrada.
+Entre os principais resultados do trabalho, destaca-se a aplicação do AutoCloud à análise temporal do tempo de enchimento. O módulo identifica três comportamentos de interesse, os ciclos lentos, as alterações persistentes e a formação de um novo padrão temporal. A análise utiliza uma base mínima de cinco ciclos válidos, considera lento o ciclo com duração igual ou superior a 1,5 vez a mediana histórica e avalia mudanças persistentes em uma janela de três ciclos. Dessa forma, o sistema destaca desvios que podem estar relacionados à redução da vazão, a obstruções ou a alterações no funcionamento do reservatório, sem apresentá-los como diagnóstico definitivo de falha.

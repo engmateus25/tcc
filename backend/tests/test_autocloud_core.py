@@ -70,5 +70,15 @@ def test_fill_time_analysis_uses_autocloud_metadata_and_flags_slow_cycle():
 
     assert result["reason"] == "slow_fill_cycle"
     assert result["method"] == "autocloud_filling_cycle_clustering"
+    assert result["current_vs_median_seconds"] == 420
+    assert result["current_vs_median_percent"] == 87.5
     assert result["alert"]["metadata"]["feature_metadata"]["raw_features"][0] == 900.0
+    assert result["alert"]["metadata"]["baseline_median_seconds"] == 480
+    assert result["alert"]["metadata"]["current_fill_time_seconds"] == 900
+    assert result["alert"]["metadata"]["current_vs_median_seconds"] == 420
+    assert result["alert"]["metadata"]["current_vs_median_percent"] == 87.5
+    assert result["alert"]["metadata"]["slow_threshold_seconds"] == 720
+    assert "Tempo observado: 15min 00s (900 s)." in result["alert"]["message"]
+    assert "Mediana historica: 8min 00s (480 s)." in result["alert"]["message"]
+    assert "Diferenca para a mediana: +7min 00s (+87,5%)." in result["alert"]["message"]
     assert "class_index" in result["alert"]["metadata"]

@@ -48,6 +48,13 @@ def analyze_fill_time_cycle(
     baseline_median = statistics.median(durations)
     baseline_mean = statistics.fmean(durations)
     baseline_stdev = statistics.pstdev(durations) if len(durations) > 1 else 0.0
+    difference_seconds = current - baseline_median
+    difference_ratio = (current / baseline_median) if baseline_median > 0 else None
+    difference_percent = (
+        ((current - baseline_median) / baseline_median) * 100.0
+        if baseline_median > 0
+        else None
+    )
     alert_type: Optional[str] = None
     severity = "warning"
     title = "Tempo de enchimento atipico"
@@ -65,6 +72,9 @@ def analyze_fill_time_cycle(
         "baseline_mean_seconds": baseline_mean,
         "baseline_stdev_seconds": baseline_stdev,
         "current_fill_time_seconds": current,
+        "current_vs_median_seconds": difference_seconds,
+        "current_vs_median_ratio": difference_ratio,
+        "current_vs_median_percent": difference_percent,
         "samples": len(durations),
         "autocloud_m": m,
         "class_index": autocloud_result["class_index"],
@@ -79,7 +89,9 @@ def analyze_fill_time_cycle(
 
     if baseline_median > 0 and current >= baseline_median * slow_factor:
         alert_type = "slow_fill_cycle"
+        title = "Tempo de enchimento lento"
         metadata["slow_factor"] = slow_factor
+        metadata["slow_threshold_seconds"] = baseline_median * slow_factor
 
     window_values = durations[-max(1, persistent_window - 1) :] + [current]
     if (
@@ -102,6 +114,8 @@ def analyze_fill_time_cycle(
         and current > baseline_mean + (3 * baseline_stdev)
     ):
         alert_type = "new_fill_time_cluster"
+        title = "Novo padrao temporal de enchimento"
+        message = "O ciclo formou um agrupamento temporal distante do historico recente."
         metadata["z_score"] = (current - baseline_mean) / baseline_stdev
 
     cluster_distance = autocloud_result.get("nearest_normalized_distance")
@@ -114,6 +128,8 @@ def analyze_fill_time_cycle(
         and current >= baseline_median * 1.2
     ):
         alert_type = "new_fill_time_cluster"
+        title = "Novo padrao temporal de enchimento"
+        message = "O ciclo formou uma nova nuvem distante do historico recente."
         metadata["cluster_distance_threshold"] = m
 
     if alert_type is None:
@@ -126,6 +142,9 @@ def analyze_fill_time_cycle(
             "baseline_mean_seconds": baseline_mean,
             "baseline_stdev_seconds": baseline_stdev,
             "current_fill_time_seconds": current,
+            "current_vs_median_seconds": difference_seconds,
+            "current_vs_median_ratio": difference_ratio,
+            "current_vs_median_percent": difference_percent,
             "class_index": autocloud_result["class_index"],
             "cloud_count": autocloud_result["cloud_count"],
             "created_cloud": autocloud_result["created_cloud"],
@@ -133,6 +152,15 @@ def analyze_fill_time_cycle(
             "feature_metadata": autocloud_result["feature_metadata"],
             "alert": None,
         }
+
+    message = _build_alert_message(
+        message,
+        current_seconds=current,
+        baseline_median_seconds=baseline_median,
+        difference_seconds=difference_seconds,
+        difference_percent=difference_percent,
+        nearest_normalized_distance=autocloud_result.get("nearest_normalized_distance"),
+    )
 
     alert = {
         "event_id": cycle["end_event_id"],
@@ -160,6 +188,9 @@ def analyze_fill_time_cycle(
         "baseline_mean_seconds": baseline_mean,
         "baseline_stdev_seconds": baseline_stdev,
         "current_fill_time_seconds": current,
+        "current_vs_median_seconds": difference_seconds,
+        "current_vs_median_ratio": difference_ratio,
+        "current_vs_median_percent": difference_percent,
         "class_index": autocloud_result["class_index"],
         "cloud_count": autocloud_result["cloud_count"],
         "created_cloud": autocloud_result["created_cloud"],
@@ -171,6 +202,61 @@ def analyze_fill_time_cycle(
 
 def _strictly_increasing(values: List[float]) -> bool:
     return all(left < right for left, right in zip(values, values[1:]))
+
+
+def _build_alert_message(
+    base_message: str,
+    *,
+    current_seconds: float,
+    baseline_median_seconds: float,
+    difference_seconds: float,
+    difference_percent: Optional[float],
+    nearest_normalized_distance: Any,
+) -> str:
+    parts = [
+        base_message,
+        (
+            "Tempo observado: "
+            f"{_format_duration(current_seconds)} "
+            f"({current_seconds:.0f} s)."
+        ),
+    ]
+    if baseline_median_seconds > 0:
+        parts.append(
+            "Mediana historica: "
+            f"{_format_duration(baseline_median_seconds)} "
+            f"({baseline_median_seconds:.0f} s)."
+        )
+        difference_label = _format_signed_duration(difference_seconds)
+        if difference_percent is not None:
+            parts.append(
+                "Diferenca para a mediana: "
+                f"{difference_label} ({_format_signed_percent(difference_percent)})."
+            )
+    if isinstance(nearest_normalized_distance, (int, float)):
+        parts.append(
+            "Distancia normalizada do cluster: "
+            f"{nearest_normalized_distance:.2f}."
+        )
+    return " ".join(parts)
+
+
+def _format_duration(seconds: float) -> str:
+    total_seconds = max(0, int(round(seconds)))
+    minutes, remaining_seconds = divmod(total_seconds, 60)
+    if minutes <= 0:
+        return f"{remaining_seconds}s"
+    return f"{minutes}min {remaining_seconds:02d}s"
+
+
+def _format_signed_duration(seconds: float) -> str:
+    sign = "+" if seconds >= 0 else "-"
+    return f"{sign}{_format_duration(abs(seconds))}"
+
+
+def _format_signed_percent(value: float) -> str:
+    sign = "+" if value >= 0 else ""
+    return f"{sign}{value:.1f}%".replace(".", ",")
 
 
 def _env_int(name: str, default: int) -> int:
