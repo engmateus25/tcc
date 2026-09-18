@@ -1,6 +1,6 @@
-# Base tecnica para escrita do TCC - AquaMonitor
+# Base tecnica para escrita do TCC - Sistema Inteligente
 
-Este documento foi preparado para servir como base tecnica para a escrita dos topicos de **Metodologia**, **Resultados**, **Conclusoes** e **Resumo** do projeto **AquaMonitor**. O objetivo e fornecer ao ChatGPT responsavel pela redacao academica uma visao detalhada da arquitetura, das funcionalidades implementadas, dos contratos de integracao, dos algoritmos utilizados e dos resultados esperados/observados no desenvolvimento do sistema.
+Este documento foi preparado para servir como base tecnica para a escrita dos topicos de **Metodologia**, **Resultados**, **Conclusoes** e **Resumo** do projeto **Sistema Inteligente**. O objetivo e fornecer ao ChatGPT responsavel pela redacao academica uma visao detalhada da arquitetura, das funcionalidades implementadas, dos contratos de integracao, dos algoritmos utilizados e dos resultados esperados/observados no desenvolvimento do sistema.
 
 O texto deve ser usado como fonte tecnica. A redacao final do TCC deve transformar estas informacoes em linguagem academica, coesa e alinhada ao template do trabalho.
 
@@ -16,7 +16,7 @@ O texto deve ser usado como fonte tecnica. A redacao final do TCC deve transform
 
 ## Visao geral do sistema
 
-O AquaMonitor e um sistema de monitoramento e controle de reservatorio de agua baseado na integracao entre hardware embarcado, aplicativo web/mobile, backend, Firebase, MQTT e inteligencia artificial. O prototipo permite acompanhar o nivel de agua do reservatorio, registrar historico de eventos, controlar uma bomba d'agua, detectar inconsistencias de sensores, estimar consumo de agua, estimar consumo eletrico da bomba, gerar relatorios e consultar informacoes por meio de um assistente de IA.
+O Sistema Inteligente de monitoramento e controle de reservatorio de agua e baseado na integracao entre hardware embarcado, aplicativo web/mobile, backend, Firebase, MQTT e inteligencia artificial. O prototipo permite acompanhar o nivel de agua do reservatorio, registrar historico de eventos, controlar uma bomba d'agua, detectar inconsistencias de sensores, estimar consumo de agua, estimar consumo eletrico da bomba, gerar relatorios e consultar informacoes por meio de um assistente de IA.
 
 A arquitetura esta dividida em quatro dominios principais:
 
@@ -642,7 +642,7 @@ A rota `/llm/chat` e um chat generico com historico de mensagens no formato:
 ]
 ```
 
-A rota `/agent` e o agente analitico do AquaMonitor. Ela recebe:
+A rota `/agent` e o agente analitico do Sistema Inteligente. Ela recebe:
 
 ```json
 {
@@ -1085,7 +1085,7 @@ Sugestao de conclusoes tecnicas:
 
 ## Base para um resumo academico
 
-O AquaMonitor consiste em um sistema embarcado e computacional para monitoramento e controle de reservatorio de agua, integrando ESP32, sensores de nivel, bomba, Firebase, MQTT, backend FastAPI, aplicativo Ionic React e recursos de inteligencia artificial. O firmware realiza a leitura de duas boias de nivel, aciona a bomba conforme uma politica de prioridade entre comando fisico, remoto e automatico, registra eventos no Firestore e utiliza buffer local para reduzir perdas durante falhas de conectividade. Uma Firebase Function e acionada automaticamente a cada novo evento de sensor e encaminha os dados ao backend, onde sao aplicadas regras deterministicas de consistencia, idempotencia, extracao de ciclos de enchimento e analise temporal do tempo de enchimento. O aplicativo apresenta dashboard, historico, graficos, controle remoto, alertas inteligentes, relatorios PDF e chatbot analitico. Os resultados demonstram a integracao entre hardware e software, a deteccao de eventos incoerentes, a estimativa de consumo de agua e energia e a possibilidade de consulta dos dados por linguagem natural. Assim, o sistema evidencia a viabilidade de uma solucao IoT de baixo custo para acompanhamento operacional de reservatorios, com potencial de expansao para notificacoes, hospedagem em nuvem e novas metricas fisicas.
+O Sistema Inteligente consiste em um sistema embarcado e computacional para monitoramento e controle de reservatorio de agua, integrando ESP32, sensores de nivel, bomba, Firebase, MQTT, backend FastAPI, aplicativo Ionic React e recursos de inteligencia artificial. O firmware realiza a leitura de duas boias de nivel, aciona a bomba conforme uma politica de prioridade entre comando fisico, remoto e automatico, registra eventos no Firestore e utiliza buffer local para reduzir perdas durante falhas de conectividade. Uma Firebase Function e acionada automaticamente a cada novo evento de sensor e encaminha os dados ao backend, onde sao aplicadas regras deterministicas de consistencia, idempotencia, extracao de ciclos de enchimento e analise temporal do tempo de enchimento. O aplicativo apresenta dashboard, historico, graficos, controle remoto, alertas inteligentes, relatorios PDF e chatbot analitico. Os resultados demonstram a integracao entre hardware e software, a deteccao de eventos incoerentes, a estimativa de consumo de agua e energia e a possibilidade de consulta dos dados por linguagem natural. Assim, o sistema evidencia a viabilidade de uma solucao IoT de baixo custo para acompanhamento operacional de reservatorios, com potencial de expansao para notificacoes, hospedagem em nuvem e novas metricas fisicas.
 
 ## Sugestoes de figuras e tabelas para o TCC
 
@@ -1128,7 +1128,7 @@ Tabelas recomendadas:
 | `/llm/chat` | POST | Chat generico com provedor LLM |
 | `/llm/chat/stream` | POST | Chat generico em streaming NDJSON |
 | `/llm/sessions/{session_id}` | GET | Retorna historico de uma sessao |
-| `/agent` | POST | Agente analitico com contexto estruturado do AquaMonitor |
+| `/agent` | POST | Agente analitico com contexto estruturado do Sistema Inteligente |
 
 ## Tabela de colecoes Firestore
 
