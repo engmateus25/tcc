@@ -271,7 +271,7 @@ def compose_answer_with_llm(
 ) -> tuple[str, Dict[str, Any]]:
     prompt_context = {
         "intent": intent.model_dump(),
-        "facts": context,
+        "facts": _context_for_llm(intent, context),
         "deterministic_baseline_answer": deterministic_answer,
         "recent_chat_history": _history_for_prompt(history),
     }
@@ -299,6 +299,29 @@ def compose_answer_with_llm(
             status_code=502,
         )
     return text, meta
+
+
+def _context_for_llm(intent: AquaIntent, context: Dict[str, Any]) -> Dict[str, Any]:
+    """Keeps provider prompts focused while preserving the complete API metadata."""
+    facts: Dict[str, Any] = {
+        "period_label": context.get("period_label"),
+        "sensor_summary": context.get("sensor_summary"),
+        "empty_count": context.get("empty_count"),
+        "full_count": context.get("full_count"),
+        "empty_duration_label": context.get("empty_duration_label"),
+        "full_duration_label": context.get("full_duration_label"),
+        "data_errors": context.get("data_errors"),
+        "data_basis": context.get("data_basis"),
+    }
+
+    if intent.kind == "water_consumption":
+        facts["water_consumption"] = context.get("water_consumption")
+    elif intent.kind == "energy_consumption":
+        facts["pump_energy"] = context.get("pump_energy")
+    elif intent.kind in ("alerts_summary", "health_check"):
+        facts["open_alerts"] = context.get("open_alerts")
+
+    return facts
 
 
 def build_deterministic_answer(intent: AquaIntent, context: Dict[str, Any]) -> str:

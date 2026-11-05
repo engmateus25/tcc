@@ -97,6 +97,25 @@ def test_agent_hybrid_uses_llm_with_structured_context(monkeypatch):
     assert "Contexto estruturado" in captured["messages"][1].content
 
 
+def test_agent_limits_prompt_facts_to_the_question_intent(monkeypatch):
+    patch_agent_context(monkeypatch)
+    monkeypatch.setenv("AGENT_RESPONSE_MODE", "hybrid")
+    captured = {}
+
+    def fake_llm(messages, stream=False, provider_name=None):
+        captured["content"] = messages[1].content
+        return "Resposta.", {"provider": "ollama", "model": "qwen3:4b-instruct"}
+
+    monkeypatch.setattr(agent_langchain, "llm_chat", fake_llm)
+
+    handle_analytics_question("Quantas vezes a caixa ficou vazia nos ultimos 7 dias?")
+
+    assert '"total_liters"' not in captured["content"]
+    assert '"total_kwh"' not in captured["content"]
+    assert '"possible_causes"' not in captured["content"]
+    assert '"empty_count": 2' in captured["content"]
+
+
 def test_agent_fallback_is_explicit_when_llm_fails(monkeypatch):
     patch_agent_context(monkeypatch)
     monkeypatch.setenv("AGENT_RESPONSE_MODE", "hybrid")
